@@ -8,6 +8,7 @@ import {
   type Weekday,
 } from '../ics/rrule';
 import { addDays, instantToWall, normalizeTime, wallToInstant } from '../util/dates';
+import { createCalendarPicker } from './calendarPicker';
 import { chooseOption } from './choiceDialog';
 import { ICONS } from './icons';
 import { attachTimeMenu, type TimeMenu } from './timeMenu';
@@ -15,6 +16,8 @@ import { attachTimeMenu, type TimeMenu } from './timeMenu';
 export interface CalendarOption {
   fileId: string;
   displayName: string;
+  /** Calendar color, shown as a dot before the name. */
+  color: string;
 }
 
 export interface EventDialogOptions {
@@ -112,9 +115,10 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         <label class="field">Title
           <input name="title" class="title-input" type="text" autocomplete="off" />
         </label>
-        <label class="field">Calendar
-          <select name="calendar"></select>
-        </label>
+        <div class="field">
+          <span id="${id}-calendar">Calendar</span>
+          <div class="calendar-picker-host"></div>
+        </div>
         <div class="segmented" role="radiogroup" aria-label="Duration">
           <label><input type="radio" name="dayMode" value="fullDay" /><span>Full day</span></label>
           <label><input type="radio" name="dayMode" value="evening" /><span>Evening</span></label>
@@ -188,7 +192,6 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     const field = <T extends HTMLElement>(name: string) =>
       form.querySelector<T>(`[name="${name}"]`)!;
     const title = field<HTMLInputElement>('title');
-    const calendar = field<HTMLSelectElement>('calendar');
     const dayModes = [...form.querySelectorAll<HTMLInputElement>('input[name="dayMode"]')];
     const dayMode = () => (dayModes.find((r) => r.checked)?.value ?? 'custom') as DayMode;
     const setMode = (m: DayMode) => dayModes.forEach((r) => (r.checked = r.value === m));
@@ -213,13 +216,8 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     dialog.querySelector('h2')!.textContent =
       mode === 'create' ? 'New event' : readOnly ? 'Event' : 'Edit event';
 
-    for (const cal of calendars) {
-      const option = document.createElement('option');
-      option.value = cal.fileId;
-      option.textContent = cal.displayName;
-      calendar.appendChild(option);
-    }
-    calendar.value = options.calendarFileId;
+    const calendar = createCalendarPicker(calendars, options.calendarFileId, `${id}-calendar`);
+    form.querySelector('.calendar-picker-host')!.replaceWith(calendar.element);
 
     const values = initialValues(draft, timeZone);
     title.value = draft.title;
@@ -357,9 +355,9 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       const input = btn.dataset.for === 'endTime' ? endTime : startTime;
       timeMenus.push(attachTimeMenu(input, btn, input === endTime ? durationHint : undefined));
     }
-    // Escape closes an open time list first, not the dialog.
+    // Escape closes an open list (times, calendars) first, not the dialog.
     dialog.addEventListener('cancel', (e) => {
-      const open = timeMenus.find((m) => m.isOpen());
+      const open = [...timeMenus, calendar].find((m) => m.isOpen());
       if (open) {
         e.preventDefault();
         open.close();
@@ -376,6 +374,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       )) {
         input.disabled = true;
       }
+      calendar.setDisabled(true);
       form.querySelector<HTMLButtonElement>('button[type="submit"]')!.hidden = true;
       cancelBtn.textContent = 'Close';
     }

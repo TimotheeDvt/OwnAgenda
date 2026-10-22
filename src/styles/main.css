@@ -1394,3 +1394,65 @@ kbd {
   background-color: transparent;
   opacity: 0.65;
 }
+
+/* Calendar chooser in the event dialog: a select-like button and list, with color dots. */
+
+.calendar-picker {
+  position: relative;
+}
+
+.calendar-picker-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-picker-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.calendar-picker-button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.calendar-picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-picker-chevron {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.calendar-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.calendar-option {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+/* On the selected (blue) row, ring the dot so a blue calendar's dot stays visible. */
+.calendar-option.is-selected .calendar-dot {
+  box-shadow: 0 0 0 2px #fff;
+}

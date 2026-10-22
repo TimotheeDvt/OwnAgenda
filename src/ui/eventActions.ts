@@ -21,11 +21,15 @@ import { showToast } from './toast';
 /** New start/end of an event, in EventDraft format (dates for all-day, ISO instants otherwise). */
 export type EventTimes = Pick<EventDraft, 'allDay' | 'start' | 'end'>;
 
+function toOption({ fileId, displayName }: { fileId: string; displayName: string }) {
+  return { fileId, displayName, color: getCalendarSettings(fileId, calendarIndex(fileId)).color };
+}
+
 /** Calendars events can be added to or moved to (subscribed calendars are read-only). */
 function calendarOptions(): CalendarOption[] {
   return orderCalendars(getCalendarState().calendars)
     .filter((c) => !subscriptionOf(c.fileId))
-    .map(({ fileId, displayName }) => ({ fileId, displayName }));
+    .map(toOption);
 }
 
 function run(action: () => void): boolean {
@@ -104,7 +108,7 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
     const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
     await openEventDialog({
       mode: 'edit',
-      calendars: calendar ? [{ fileId: calendar.fileId, displayName: calendar.displayName }] : [],
+      calendars: calendar ? [toOption(calendar)] : [],
       calendarFileId: event.calendarFileId,
       draft: eventToDraft(event),
       timeZone: getSettings().timeZone,
