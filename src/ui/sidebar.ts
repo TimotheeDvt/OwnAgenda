@@ -15,7 +15,7 @@ import {
 import type { AgendaEvent } from '../types';
 import { readableTextColor } from '../util/color';
 import { openCalendarStylePicker } from './calendarStylePicker';
-import { ICONS, type IconName } from './icons';
+import { ICONS, statusIcon, type IconName } from './icons';
 import { mountSearch } from './search';
 
 export interface SidebarActions {
@@ -183,13 +183,18 @@ function startDrag(
 }
 
 function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLElement[] {
-  const nodes: HTMLElement[] = [el('h2', 'sidebar-title', 'Calendars')];
-
+  // Title line; a rotating arrow next to it while calendars load or update from storage.
+  const title = el('h2', 'sidebar-title sidebar-title-row', 'Calendars');
   if (state.status === 'loading') {
-    nodes.push(
-      el('p', 'muted', state.calendars.length ? 'Updating from Google Drive…' : 'Loading…'),
+    title.appendChild(
+      statusIcon(
+        'refresh',
+        state.calendars.length ? 'Updating from Google Drive…' : 'Loading…',
+        true,
+      ),
     );
   }
+  const nodes: HTMLElement[] = [title];
   if (state.error) nodes.push(el('p', 'sidebar-error', state.error));
 
   const list = el('ul', 'calendar-list');

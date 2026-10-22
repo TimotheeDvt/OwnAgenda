@@ -1741,3 +1741,42 @@ body.is-resizing-sidebar {
   position: static;
   margin-right: 4px;
 }
+
+/* Status icons (updating, saving, saved): icon only, message on hover. */
+
+.status-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+.status-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.save-status[data-state='saved'] .status-icon {
+  color: var(--success);
+}
+
+.spin svg {
+  animation: spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin svg {
+    animation: none;
+  }
+}
+
+/* "CALENDARS" title with the updating arrow on the same line. */
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-title-row .status-icon svg {
+  width: 13px;
+  height: 13px;
+}

@@ -53,7 +53,7 @@ import type { AgendaEvent } from '../types';
 import { mountCalendarView, type CalendarView } from './calendarView';
 import { chooseOption } from './choiceDialog';
 import { createEventNow, openEvent } from './eventActions';
-import { ICONS } from './icons';
+import { ICONS, statusIcon } from './icons';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
 import { mountSidebar, type Sidebar } from './sidebar';
 import { setupSidebarResize } from './sidebarResize';
@@ -194,6 +194,15 @@ function renderSaveStatus(state: CalendarState): void {
     return;
   }
   el.dataset.state = state.saveStatus;
+  // Saving / saved are icons only (message on hover); problems keep their text and Retry.
+  if (state.saveStatus === 'saving') {
+    el.replaceChildren(statusIcon('refresh', SAVE_LABELS.saving, true));
+    return;
+  }
+  if (state.saveStatus === 'saved') {
+    el.replaceChildren(statusIcon('cloudCheck', SAVE_LABELS.saved));
+    return;
+  }
   const label = document.createElement('span');
   label.textContent = SAVE_LABELS[state.saveStatus];
   if (state.saveError) label.title = state.saveError;

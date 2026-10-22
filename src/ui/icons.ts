@@ -47,6 +47,10 @@ export const ICONS = {
       '<circle cx="8.5" cy="12" r="3"/><circle cx="15.5" cy="12" r="3"/>' +
       '<circle cx="8.5" cy="19" r="3"/><circle cx="15.5" cy="19" r="3"/></g>',
   ),
+  cloudCheck: svg(
+    '<path d="M17.5 19H7a5 5 0 1 1 .9-9.92A6 6 0 0 1 19 11a4 4 0 0 1-1.5 8z"/>' +
+      '<path d="M9.5 14.5l2 2 3.5-3.5"/>',
+  ),
   link: svg(
     '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>' +
       '<path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/>',
@@ -54,3 +58,17 @@ export const ICONS = {
 } as const;
 
 export type IconName = keyof typeof ICONS;
+
+/**
+ * A status icon with its message as tooltip and accessible name (no visible text).
+ * `spinning` rotates it (e.g. "updating", "saving").
+ */
+export function statusIcon(name: IconName, message: string, spinning = false): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = `status-icon${spinning ? ' spin' : ''}`;
+  span.innerHTML = ICONS[name];
+  span.setAttribute('role', 'img');
+  span.setAttribute('aria-label', message);
+  span.title = message;
+  return span;
+}
