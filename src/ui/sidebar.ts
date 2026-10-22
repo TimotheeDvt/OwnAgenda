@@ -5,6 +5,7 @@ import {
   type CalendarState,
 } from '../store/calendarStore';
 import {
+  effectiveTextColor,
   getCalendarSettings,
   getSettings,
   moveCalendar,
@@ -13,7 +14,6 @@ import {
   updateCalendarSettings,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { readableTextColor } from '../util/color';
 import { openCalendarStylePicker } from './calendarStylePicker';
 import { ICONS, statusIcon, type IconName } from './icons';
 import { mountSearch } from './search';
@@ -240,7 +240,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     color.type = 'button';
     color.style.background = settings.color;
     // Font icons take the text color: dark or white, whichever reads best on the square.
-    color.style.color = readableTextColor(settings.color);
+    color.style.color = effectiveTextColor(settings);
     color.setAttribute('aria-label', `Color and icon of ${calendar.displayName}`);
     color.title = 'Change color and icon';
     color.addEventListener('click', () =>
@@ -249,6 +249,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
         calendarName: calendar.displayName,
         color: settings.color,
         icon: settings.icon,
+        textColor: settings.textColor,
         onChange: (patch) => updateCalendarSettings(calendar.fileId, index, patch),
       }),
     );

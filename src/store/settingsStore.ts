@@ -1,5 +1,6 @@
 import { DEFAULT_CALENDAR_COLORS, SETTINGS_SAVE_DEBOUNCE_MS, SETTINGS_VERSION } from '../config';
 import { storage } from '../storage';
+import { readableTextColor } from '../util/color';
 import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
 export const VIEW_NAMES = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'] as const;
@@ -11,6 +12,8 @@ export interface CalendarSettings {
   visible: boolean;
   /** An emoji shown in the calendar's color square and before its events' names; "" = none. */
   icon: string;
+  /** Color of event text and icons on this calendar's color; "" = automatic (best contrast). */
+  textColor: string;
 }
 
 /** Longest icon accepted (emoji with modifiers/joiners take several UTF-16 units). */
@@ -87,6 +90,10 @@ export function normalizeSettings(raw: unknown): Settings {
         color: typeof value.color === 'string' && HEX_COLOR.test(value.color) ? value.color : '',
         visible: typeof value.visible === 'boolean' ? value.visible : true,
         icon: normalizeIcon(value.icon),
+        textColor:
+          typeof value.textColor === 'string' && HEX_COLOR.test(value.textColor)
+            ? value.textColor
+            : '',
       };
     }
   }
@@ -216,7 +223,15 @@ export function getCalendarSettings(fileId: string, index: number): CalendarSett
     visible: saved?.visible ?? true,
     color: saved?.color || fallbackColor,
     icon: saved?.icon ?? '',
+    textColor: saved?.textColor ?? '',
   };
+}
+
+/** The text/icon color used on the calendar's color: the chosen one, or the most readable. */
+export function effectiveTextColor(
+  calendar: Pick<CalendarSettings, 'color' | 'textColor'>,
+): string {
+  return calendar.textColor || readableTextColor(calendar.color);
 }
 
 export function updateCalendarSettings(

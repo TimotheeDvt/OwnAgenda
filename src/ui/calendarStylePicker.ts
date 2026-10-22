@@ -1,13 +1,24 @@
 import { DEFAULT_CALENDAR_COLORS } from '../config';
-import { normalizeIcon } from '../store/settingsStore';
+import { effectiveTextColor, normalizeIcon } from '../store/settingsStore';
 import { DEFAULT_CALENDAR_ICONS } from './iconFont';
 
 /** Preset colors: the default palette plus a few more. */
 const PRESET_COLORS = [...DEFAULT_CALENDAR_COLORS, '#0ea5e9', '#84cc16', '#64748b', '#78350f'];
 
+/** Text/icon colors offered: "" = automatic (dark or white, whichever reads best). */
+const TEXT_COLORS: [color: string, name: string][] = [
+  ['', 'Automatic (best contrast)'],
+  ['#ffffff', 'White'],
+  ['#111827', 'Black'],
+  ['#fde68a', 'Light yellow'],
+  ['#1e3a8a', 'Navy'],
+];
+
 export interface CalendarStyle {
   color: string;
   icon: string;
+  /** "" = automatic. */
+  textColor: string;
 }
 
 export interface StylePickerOptions extends CalendarStyle {
@@ -20,13 +31,14 @@ export interface StylePickerOptions extends CalendarStyle {
 let openPicker: { close(): void } | null = null;
 
 /**
- * Small popover to choose a calendar's color (presets or any color) and icon: one of the
+ * Small popover to choose a calendar's color (presets or any color), the color of its text and
+ * icon (automatic or a few presets), and its icon: one of the
  * Material Design (Nerd Font nf-md) icons, any pasted emoji or nf-md icon, or none.
  * Changes apply immediately; it closes on Escape or a click outside.
  */
 export function openCalendarStylePicker(options: StylePickerOptions): void {
   openPicker?.close();
-  let { color, icon } = options;
+  let { color, icon, textColor } = options;
 
   const panel = document.createElement('div');
   panel.className = 'style-picker';
@@ -62,6 +74,21 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
   customInput.addEventListener('change', () => setColor(customInput.value));
   custom.append(customInput, document.createTextNode('Custom color'));
 
+  // Text & icon color: each tile previews "Aa" on the calendar's color.
+  const textRow = document.createElement('div');
+  textRow.className = 'style-text-colors';
+  const textButtons = TEXT_COLORS.map(([value, name]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'style-text-color';
+    btn.textContent = value ? 'Aa' : 'Auto';
+    btn.title = name;
+    btn.setAttribute('aria-label', `Text and icon color: ${name}`);
+    btn.addEventListener('click', () => setTextColor(value));
+    textRow.appendChild(btn);
+    return { btn, value };
+  });
+
   // Icons
   const grid = document.createElement('div');
   grid.className = 'style-icons';
@@ -95,7 +122,16 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     if (value) setIcon(value, false);
   });
 
-  panel.append(heading('Color'), swatches, custom, heading('Icon'), grid, iconInput);
+  panel.append(
+    heading('Color'),
+    swatches,
+    custom,
+    heading('Text & icon'),
+    textRow,
+    heading('Icon'),
+    grid,
+    iconInput,
+  );
 
   function sync() {
     for (const { btn, preset } of colorButtons) {
@@ -106,6 +142,13 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     const isCustom = !PRESET_COLORS.some((p) => p.toLowerCase() === color.toLowerCase());
     custom.classList.toggle('is-selected', isCustom);
     customInput.value = color;
+    for (const { btn, value } of textButtons) {
+      btn.style.background = color;
+      btn.style.color = effectiveTextColor({ color, textColor: value });
+      const selected = value === textColor;
+      btn.classList.toggle('is-selected', selected);
+      btn.setAttribute('aria-pressed', String(selected));
+    }
     none.classList.toggle('is-selected', icon === '');
     for (const { btn, emoji } of iconButtons) btn.classList.toggle('is-selected', emoji === icon);
   }
@@ -114,6 +157,12 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     color = next;
     sync();
     options.onChange({ color });
+  }
+
+  function setTextColor(next: string) {
+    textColor = next;
+    sync();
+    options.onChange({ textColor });
   }
 
   function setIcon(next: string, clearInput = true) {

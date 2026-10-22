@@ -1825,3 +1825,30 @@ body.is-resizing-sidebar {
 .calendar-host.fc:not(:has(.fc-list)) .fc-capture-button {
   display: none;
 }
+
+/* Text & icon color choices: tiles preview "Aa" on the calendar's color. */
+.style-text-colors {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.style-text-color {
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.style-text-color.is-selected {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.style-text-color:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

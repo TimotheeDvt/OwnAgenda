@@ -11,6 +11,7 @@ import {
   subscriptionOf,
 } from '../store/calendarStore';
 import {
+  effectiveTextColor,
   getCalendarSettings,
   getSettings,
   onSettingsChange,
@@ -19,7 +20,6 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { readableTextColor } from '../util/color';
 import { changeEventTimes, createEventAt, openEvent, type EventTimes } from './eventActions';
 import { captureToClipboard } from './captureView';
 import { ICONS } from './icons';
@@ -51,11 +51,9 @@ const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
 };
 
 function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
-  const { color, icon } = getCalendarSettings(
-    event.calendarFileId,
-    calendarIndex(event.calendarFileId),
-  );
-  const textColor = readableTextColor(color);
+  const settings = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
+  const { color, icon } = settings;
+  const textColor = effectiveTextColor(settings);
   return {
     id: event.id,
     title: event.title || '(No title)',

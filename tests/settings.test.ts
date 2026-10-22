@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   defaultSettings,
+  effectiveTextColor,
   getSettings,
   moveCalendar,
   normalizeIcon,
@@ -47,7 +48,7 @@ describe('normalizeSettings', () => {
     expect(s.weekStartsOn).toBe(d.weekStartsOn);
     expect(s.timeZone).toBe(d.timeZone);
     expect(s.theme).toBe(d.theme);
-    expect(s.calendars).toEqual({ abc: { color: '', visible: true, icon: '' } });
+    expect(s.calendars).toEqual({ abc: { color: '', visible: true, icon: '', textColor: '' } });
   });
 
   it('preserves unknown fields so newer settings are not lost', () => {
@@ -112,5 +113,21 @@ describe('Nerd Font (Material Design) icons', () => {
     const calendarIcon = String.fromCodePoint(0xf00ed); // nf-md-calendar
     expect(normalizeIcon(calendarIcon)).toBe(calendarIcon);
     expect(normalizeIcon(` ${calendarIcon}${String.fromCodePoint(0xf00d6)}`)).toBe(calendarIcon);
+  });
+});
+
+describe('calendar text color', () => {
+  it('keeps a valid chosen color, and is automatic otherwise', () => {
+    const s = normalizeSettings({
+      calendars: { a: { color: '#ef4444', textColor: '#fde68a' }, b: { textColor: 'yellow' } },
+    });
+    expect(s.calendars.a?.textColor).toBe('#fde68a');
+    expect(s.calendars.b?.textColor).toBe('');
+  });
+
+  it('uses the chosen color, or the most readable one when automatic', () => {
+    expect(effectiveTextColor({ color: '#ef4444', textColor: '#fde68a' })).toBe('#fde68a');
+    expect(effectiveTextColor({ color: '#ef4444', textColor: '' })).toBe('#ffffff');
+    expect(effectiveTextColor({ color: '#fde047', textColor: '' })).toBe('#111827');
   });
 });
