@@ -19,6 +19,7 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { readableTextColor } from '../util/color';
 import { changeEventTimes, createEventAt, openEvent, type EventTimes } from './eventActions';
 import intlTimeZonePlugin from './timeZonePlugin';
 
@@ -53,6 +54,8 @@ function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
     end: event.endInput,
     allDay: event.allDay,
     color,
+    // Dark or white text, whichever reads best on the event's background.
+    textColor: readableTextColor(color),
     // Events of subscribed calendars are copies of an online calendar: no drag & drop.
     editable: !readOnly,
     classNames: event.recurring ? ['is-recurring'] : [],
