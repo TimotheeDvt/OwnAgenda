@@ -49,6 +49,19 @@ export interface Settings {
   /** File IDs in the order chosen in the sidebar; calendars not listed come after, by name. */
   calendarOrder: string[];
   calendars: Record<string, CalendarSettings>;
+  /**
+   * Events shown faded ("ghost"), one occurrence each (see ghostEvents.ts). Kept here, not in
+   * the .ics files, so events of subscribed calendars can be ghosted too.
+   */
+  ghostEvents: GhostEvent[];
+}
+
+export interface GhostEvent {
+  /** The occurrence's id (AgendaEvent.id: "fileId/uid" plus the RECURRENCE-ID for series). */
+  id: string;
+  /** Its start and end (ISO instants): past ghosts are dropped. */
+  start: string;
+  end: string;
 }
 
 export type SettingsListener = (settings: Settings) => void;
@@ -65,6 +78,7 @@ export function defaultSettings(): Settings {
     corsProxy: '',
     calendarOrder: [],
     calendars: {},
+    ghostEvents: [],
   };
 }
 
@@ -122,7 +136,22 @@ export function normalizeSettings(raw: unknown): Settings {
       ? [...new Set(raw.calendarOrder.filter((id): id is string => typeof id === 'string'))]
       : defaults.calendarOrder,
     calendars,
+    ghostEvents: normalizeGhostEvents(raw.ghostEvents),
   };
+}
+
+/** Valid entries only (an id and two dates), one per id. */
+function normalizeGhostEvents(raw: unknown): GhostEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const byId = new Map<string, GhostEvent>();
+  for (const value of raw) {
+    if (!isRecord(value) || typeof value.id !== 'string') continue;
+    const { start, end } = value;
+    if (typeof start !== 'string' || typeof end !== 'string') continue;
+    if (Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) continue;
+    byId.set(value.id, { id: value.id, start, end });
+  }
+  return [...byId.values()];
 }
 
 let settings: Settings = defaultSettings();

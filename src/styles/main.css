@@ -725,30 +725,40 @@ code {
   overflow-wrap: anywhere;
 }
 
-.event-view .event-view-edit {
+.event-view .event-view-action {
   flex: none;
   width: 34px;
   height: 34px;
-  margin: -6px -8px 0 0;
+  margin-top: -6px;
   color: var(--text);
 }
 
+.event-view .event-view-action svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* The pen sits in the corner (its button's padding overlaps the dialog's). */
+.event-view .event-view-edit {
+  margin-right: -8px;
+}
+
 .event-view .event-view-delete {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  margin: -6px 0 0;
   color: var(--danger);
 }
 
-.event-view .event-view-delete svg {
-  width: 20px;
-  height: 20px;
+.event-view .event-view-ghost[aria-pressed='true'] {
+  background: var(--surface-hover);
+  color: var(--primary);
 }
 
-.event-view .event-view-edit svg {
-  width: 20px;
-  height: 20px;
+/* Ghost events: faded in the calendar (and the view's color square, as a preview). */
+.calendar-host.fc .fc-event.is-ghost {
+  opacity: 0.4;
+}
+
+.event-view.is-ghost .event-view-color {
+  opacity: 0.4;
 }
 
 .event-view-tag {

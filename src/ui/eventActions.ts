@@ -13,7 +13,14 @@ import {
   ruleOfEvent,
   subscriptionOf,
   undo,
+  type EditOptions,
 } from '../store/calendarStore';
+import {
+  forgetGhostEvents,
+  isGhostEvent,
+  moveGhostEvent,
+  setGhostEvent,
+} from '../store/ghostEvents';
 import { getCalendarSettings, getSettings, orderCalendars } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { instantToWall, wallToInstant } from '../util/dates';
@@ -161,6 +168,7 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
       : undefined,
     canEdit: !subscription && !readOnly,
     onDelete: () => confirmAndDelete(event),
+    ghost: { value: isGhostEvent(event), onToggle: (ghost) => setGhostEvent(event, ghost) },
     // A subscribed event can still be copied into one of your calendars (not while offline).
     canDuplicate: !readOnly,
   });
@@ -193,8 +201,31 @@ async function confirmAndDelete(event: AgendaEvent): Promise<boolean> {
     );
     if (choice !== 'delete') return false;
   }
+  return removeEvent(event, scope);
+}
+
+/** Deletes (with its ghost, see ghostEvents.ts). True if deleted. */
+function removeEvent(event: AgendaEvent, scope: EditScope): boolean {
   if (!run(() => deleteEvent(event, scope))) return false;
+  forgetGhostEvents(event, event.recurring && scope !== 'this' ? scope : undefined);
   showToast('Event deleted.');
+  return true;
+}
+
+/** Applies an edit; a ghosted event stays ghosted at its new time / in its new calendar. */
+function applyEdit(event: AgendaEvent, draft: EventDraft, options: EditOptions = {}): boolean {
+  if (!run(() => editEvent(event, draft, options))) return false;
+  // Edits of a whole series can change the occurrences' ids: only follow a single occurrence.
+  if (!event.recurring || options.scope === 'this') {
+    const { timeZone } = getSettings();
+    const instant = (value: string) =>
+      draft.allDay ? wallToInstant(value, '00:00', timeZone) : Date.parse(value);
+    moveGhostEvent(
+      event,
+      { start: instant(draft.start), end: instant(draft.end) },
+      options.targetFileId ?? event.calendarFileId,
+    );
+  }
   return true;
 }
 
@@ -223,28 +254,28 @@ async function editExistingEvent(event: AgendaEvent): Promise<void> {
       if (!chosen) return;
       scope = chosen;
     }
-    if (run(() => deleteEvent(event, scope))) showToast('Event deleted.');
+    removeEvent(event, scope);
     return;
   }
 
   const targetFileId = result.calendarFileId;
   if (!event.recurring) {
-    run(() => editEvent(event, result.draft, { targetFileId }));
+    applyEdit(event, result.draft, { targetFileId });
     return;
   }
   const moving = targetFileId !== event.calendarFileId;
   const ruleChanged = result.draft.rrule !== undefined;
   const scope = await chooseScope('edit', { this: !moving && !ruleChanged, following: !moving });
-  if (scope) run(() => editEvent(event, result.draft, { scope, targetFileId }));
+  if (scope) applyEdit(event, result.draft, { scope, targetFileId });
 }
 
 /** Applies a drag & drop move or a resize. Resolves false if cancelled or failed (to revert). */
 export async function changeEventTimes(event: AgendaEvent, times: EventTimes): Promise<boolean> {
   const draft = { ...eventToDraft(event), ...times };
-  if (!event.recurring) return run(() => editEvent(event, draft));
+  if (!event.recurring) return applyEdit(event, draft);
   const scope = await chooseScope('edit', { this: true, following: true });
   if (!scope) return false;
-  return run(() => editEvent(event, draft, { scope }));
+  return applyEdit(event, draft, { scope });
 }
 
 /** Undo button / Ctrl+Z: reverts the last change and says which. */

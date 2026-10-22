@@ -92,6 +92,18 @@ describe('calendar order', () => {
   });
 });
 
+describe('ghost events', () => {
+  it('normalizes the saved list', () => {
+    const ghost = { id: 'f/a', start: '2026-10-22T08:00:00Z', end: '2026-10-22T09:00:00Z' };
+    expect(
+      normalizeSettings({
+        ghostEvents: [ghost, 'f/b', { id: 'f/c', start: 'nope', end: ghost.end }, { ...ghost }],
+      }).ghostEvents,
+    ).toEqual([ghost]);
+    expect(normalizeSettings({}).ghostEvents).toEqual([]);
+  });
+});
+
 describe('calendar icons', () => {
   it('keeps one emoji (including joined/modified ones) and drops invalid values', () => {
     expect(normalizeIcon(' 🎓 ')).toBe('🎓');

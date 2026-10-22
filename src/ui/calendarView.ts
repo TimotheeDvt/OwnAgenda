@@ -18,6 +18,7 @@ import {
   onHistoryChange,
   subscriptionOf,
 } from '../store/calendarStore';
+import { isGhostEvent } from '../store/ghostEvents';
 import {
   effectiveTextColor,
   getCalendarSettings,
@@ -113,7 +114,10 @@ function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
     textColor,
     // Events of subscribed calendars are copies of an online calendar: no drag & drop.
     editable: !readOnly,
-    classNames: event.recurring ? ['is-recurring'] : [],
+    classNames: [
+      ...(event.recurring ? ['is-recurring'] : []),
+      ...(isGhostEvent(event) ? ['is-ghost'] : []),
+    ],
     // The calendar icon is drawn by eventDidMount (see placeIcon).
     extendedProps: { agendaEvent: event, icon, textColor },
   };
@@ -385,8 +389,10 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const offSettings = onSettingsChange((s) => {
     if (s.timeZone !== last.timeZone) calendar.setOption('timeZone', s.timeZone);
     if (s.weekStartsOn !== last.weekStartsOn) calendar.setOption('firstDay', s.weekStartsOn);
-    // Colors and visibility only affect events.
-    if (s.calendars !== last.calendars) calendar.refetchEvents();
+    // Colors, visibility and ghosts only affect events.
+    if (s.calendars !== last.calendars || s.ghostEvents !== last.ghostEvents) {
+      calendar.refetchEvents();
+    }
     last = s;
   });
   let lastCalendars = getCalendarState().calendars;

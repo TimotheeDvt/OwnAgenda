@@ -22,6 +22,8 @@ export interface EventViewOptions {
    * true when the event was deleted (the view then closes), false to stay on it.
    */
   onDelete?: () => Promise<boolean>;
+  /** The ghost toggle (faded in the calendar): current state, and what to do when toggled. */
+  ghost?: { value: boolean; onToggle(ghost: boolean): void };
   canDuplicate: boolean;
 }
 
@@ -122,28 +124,50 @@ export function openEventView(options: EventViewOptions): Promise<EventViewResul
       dialog.close();
     };
 
+    const headerButton = (icon: IconName, className: string, label: string) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `icon-btn event-view-action ${className}`;
+      btn.innerHTML = ICONS[icon];
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+      header.append(btn);
+      return btn;
+    };
+
+    // Ghost: on every event, even read-only ones (it is a display setting, not in the file).
+    const ghostOption = options.ghost;
+    if (ghostOption) {
+      let ghost = ghostOption.value;
+      const btn = headerButton('ghost', 'event-view-ghost', '');
+      const sync = () => {
+        const label = ghost ? 'Show normally (remove ghost)' : 'Make ghost (fade it)';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('aria-pressed', String(ghost));
+        dialog.classList.toggle('is-ghost', ghost);
+      };
+      btn.addEventListener('click', () => {
+        ghost = !ghost;
+        ghostOption.onToggle(ghost);
+        sync();
+      });
+      sync();
+    }
+
     if (options.canEdit) {
-      const edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'icon-btn event-view-edit';
-      edit.innerHTML = ICONS.edit;
-      edit.title = 'Edit event (E)';
-      edit.setAttribute('aria-label', 'Edit event');
-      edit.addEventListener('click', () => close('edit'));
       const onDelete = options.onDelete;
       if (onDelete) {
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'icon-btn event-view-delete';
-        remove.innerHTML = ICONS.trash;
-        remove.title = 'Delete event';
-        remove.setAttribute('aria-label', 'Delete event');
-        remove.addEventListener('click', async () => {
-          if (await onDelete()) close(null);
-        });
-        header.append(remove);
+        headerButton('trash', 'event-view-delete', 'Delete event').addEventListener(
+          'click',
+          async () => {
+            if (await onDelete()) close(null);
+          },
+        );
       }
-      header.append(edit);
+      const edit = headerButton('edit', 'event-view-edit', 'Edit event');
+      edit.title = 'Edit event (E)';
+      edit.addEventListener('click', () => close('edit'));
     } else if (options.readOnlyTag) {
       const tag = document.createElement('span');
       tag.className = 'event-view-tag';

@@ -35,6 +35,7 @@ import {
   type CalendarState,
   type ReadOnlyReason,
 } from '../store/calendarStore';
+import { pruneGhostEvents } from '../store/ghostEvents';
 import { clearSnapshot, readSnapshot, writeSnapshot } from '../store/offlineCache';
 import {
   applyCachedSettings,
@@ -753,6 +754,8 @@ function setupSaving(): void {
   );
   onCalendarsChange((state) => {
     renderSaveStatus(state);
+    // Ghosts of events that are over are dropped so they don't pile up in the settings.
+    if (state.status === 'ready') pruneGhostEvents();
     scheduleSnapshot();
     // Also covers storage being unreachable while the device is online.
     if (state.readOnly) setSettingsPersistence(false);
