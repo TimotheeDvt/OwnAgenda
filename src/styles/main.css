@@ -169,22 +169,34 @@ code {
   flex: none;
   display: flex;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 6px 8px;
   border-top: 1px solid var(--border);
 }
 
+/* The footer buttons share the full width of the sidebar. */
 .sidebar-footer .icon-btn {
   position: relative;
-  width: 30px;
-  height: 30px;
+  flex: 1;
+  width: auto;
+  height: 32px;
 }
 
-/* A proxy is configured. */
+.sidebar-footer .icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Offline copy is on. */
+.sidebar-footer .icon-btn.is-on {
+  color: var(--primary);
+}
+
+/* A proxy is configured: a dot at the icon's top-right. */
 .sidebar-footer .icon-btn.is-active::after {
   content: '';
   position: absolute;
   top: 5px;
-  right: 5px;
+  left: calc(50% + 7px);
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -728,14 +740,6 @@ code {
 
 .new-calendar {
   margin-top: 8px;
-}
-
-.option-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 0.85rem;
-  cursor: pointer;
 }
 
 /* Search */

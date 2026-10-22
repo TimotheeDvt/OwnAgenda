@@ -294,23 +294,23 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
   return nodes;
 }
 
-function renderOptions(actions: SidebarActions): HTMLElement[] {
-  const offline = el('input');
-  offline.type = 'checkbox';
-  offline.checked = getSettings().offlineCache;
-  offline.addEventListener('change', () => actions.onToggleOfflineCache(offline.checked));
-  const offlineLabel = el('label', 'option-label');
-  offlineLabel.append(offline, el('span', undefined, 'Keep an offline copy on this device'));
-  offlineLabel.title =
-    'Stores your calendars in this browser so the agenda opens instantly and stays readable ' +
-    'when Google Drive is unreachable.';
-
-  return [el('h2', 'sidebar-title', 'Options'), offlineLabel];
-}
-
-/** Icon-only tools pinned to the bottom of the sidebar. */
+/** Icon-only tools pinned to the bottom of the sidebar, sharing its full width. */
 function renderFooter(actions: SidebarActions): HTMLElement[] {
   const shortcuts = iconButton('keyboard', 'Keyboard shortcuts (?)', actions.onShowShortcuts);
+
+  // Offline copy toggle: highlighted when on.
+  const offlineOn = getSettings().offlineCache;
+  const offline = iconButton(
+    'database',
+    `Offline copy on this device: ${offlineOn ? 'ON' : 'OFF'}\n` +
+      'Keeps your calendars in this browser so the agenda opens instantly and stays readable ' +
+      'when Google Drive is unreachable. Signing out deletes it.\n' +
+      `Click to turn it ${offlineOn ? 'off' : 'on'}.`,
+    () => actions.onToggleOfflineCache(!offlineOn),
+  );
+  offline.setAttribute('aria-label', 'Keep an offline copy on this device');
+  offline.setAttribute('aria-pressed', String(offlineOn));
+  offline.classList.toggle('is-on', offlineOn);
 
   const proxy = getSettings().corsProxy;
   const proxyButton = iconButton(
@@ -323,17 +323,16 @@ function renderFooter(actions: SidebarActions): HTMLElement[] {
   // A dot shows that a proxy is set.
   proxyButton.classList.toggle('is-active', Boolean(proxy));
 
-  return [shortcuts, proxyButton];
+  return [offline, proxyButton, shortcuts];
 }
 
 export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sidebar {
   const searchSection = el('section', 'sidebar-section search-section');
   const folderSection = el('section', 'sidebar-section');
   const calendarsSection = el('section', 'sidebar-section');
-  const optionsSection = el('section', 'sidebar-section');
   // Sections scroll; the footer stays glued to the bottom of the panel.
   const content = el('div', 'sidebar-content');
-  content.append(searchSection, folderSection, calendarsSection, optionsSection);
+  content.append(searchSection, folderSection, calendarsSection);
   const footer = el('div', 'sidebar-footer');
   host.replaceChildren(content, footer);
 
@@ -344,7 +343,6 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
     const state = getCalendarState();
     folderSection.replaceChildren(...renderFolder(actions, state));
     calendarsSection.replaceChildren(...renderCalendars(actions, state));
-    optionsSection.replaceChildren(...renderOptions(actions));
     footer.replaceChildren(...renderFooter(actions));
     if (focusAfterRender) {
       calendarsSection

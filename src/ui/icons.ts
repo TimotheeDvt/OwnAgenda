@@ -28,6 +28,10 @@ export const ICONS = {
     '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/>' +
       '<path d="M21 12H9"/>',
   ),
+  database: svg(
+    '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>' +
+      '<path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/>',
+  ),
   keyboard: svg(
     '<rect x="2" y="6" width="20" height="12" rx="2"/>' +
       '<path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
