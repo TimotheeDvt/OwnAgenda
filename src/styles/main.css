@@ -1541,6 +1541,26 @@ kbd {
   opacity: 0.5;
 }
 
+/* Hidden calendars take less room: a shorter row, smaller name and color square. */
+.calendar-item.is-hidden {
+  padding: 1px 0;
+  font-size: 0.85em;
+}
+
+.calendar-item.is-hidden .calendar-color {
+  width: 16px;
+  height: 16px;
+  /* Centered where the full-size square is (3 + 16 + 3 = 22px), so names stay aligned. */
+  margin: 0 3px;
+  font-size: 10px;
+}
+
+/* Only the row's buttons (show, rename, refresh): the drag handle keeps its own sizing. */
+.calendar-item.is-hidden .calendar-tools .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+
 .calendar-label {
   cursor: default;
 }
