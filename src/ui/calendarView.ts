@@ -158,21 +158,29 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The view and date kept in the URL (?view=…&date=YYYY-MM-DD), so a reload stays there. */
+/** Short view names used in the URL. */
+const URL_VIEW_NAMES: Record<ViewName, string> = {
+  dayGridMonth: 'month',
+  timeGridWeek: 'week',
+  timeGridDay: 'day',
+  listWeek: 'list',
+};
+
+/** The view and date kept in the URL (?view=week&date=YYYY-MM-DD), so a reload stays there. */
 function readUrlPosition(): { view?: ViewName; date?: string } {
   const params = new URLSearchParams(window.location.search);
-  const view = params.get('view') as ViewName | null;
+  const name = params.get('view');
   const date = params.get('date');
   return {
-    view: view && VIEW_NAMES.includes(view) ? view : undefined,
+    view: VIEW_NAMES.find((v) => URL_VIEW_NAMES[v] === name),
     date: date && ISO_DATE.test(date) && !Number.isNaN(Date.parse(date)) ? date : undefined,
   };
 }
 
 /** Updates the URL in place (no new history entry for every period browsed). */
-function writeUrlPosition(view: string, date: string): void {
+function writeUrlPosition(view: ViewName, date: string): void {
   const url = new URL(window.location.href);
-  url.searchParams.set('view', view);
+  url.searchParams.set('view', URL_VIEW_NAMES[view]);
   url.searchParams.set('date', date);
   if (url.href !== window.location.href) window.history.replaceState(null, '', url);
 }
