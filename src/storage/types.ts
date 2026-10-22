@@ -1,7 +1,6 @@
 /**
- * Where calendars and settings are stored. The app only talks to this interface; Google Drive is
- * the first implementation (see googleDrive.ts) and others (OneDrive, Dropbox, WebDAV, local
- * files…) can be added without touching the stores or the UI.
+ * Where calendars and settings are stored. The app only talks to this interface; the Google Drive
+ * implementation is in googleDrive/.
  *
  * File IDs and folder IDs are opaque strings chosen by the provider.
  */

@@ -48,7 +48,7 @@ export type SaveStatus = 'idle' | 'saving' | 'unsaved' | 'error' | 'saved';
 
 export interface CalendarState {
   status: LoadStatus;
-  /** Fatal error for the whole load (folder missing, Drive unreachable…). */
+  /** Fatal error for the whole load (folder missing, Drive unreachable...). */
   error: string | null;
   /** Per-file problems that didn't stop the other calendars from loading. */
   warnings: string[];
@@ -129,7 +129,6 @@ function resetSaveTracking(): void {
 
 const byName = (a: CalendarFile, b: CalendarFile) => a.name.localeCompare(b.name);
 
-// ---------------------------------------------------------------------------------------------
 // Loading
 
 /** Shows calendars from the offline copy until Drive answers. Ignored once data is loaded. */
@@ -264,7 +263,6 @@ export function snapshotFiles(): CachedFile[] | null {
   }));
 }
 
-// ---------------------------------------------------------------------------------------------
 // Search
 
 const SEARCH_PAST_MS = 365 * 86_400_000;
@@ -310,7 +308,6 @@ export function searchEvents(query: string, now = new Date()): AgendaEvent[] {
     .slice(0, SEARCH_LIMIT);
 }
 
-// ---------------------------------------------------------------------------------------------
 // Editing
 
 function requireCalendar(fileId: string): CalendarFile {
@@ -457,7 +454,6 @@ export function deleteEvent(event: AgendaEvent, scope: EditScope = 'all'): void 
   });
 }
 
-// ---------------------------------------------------------------------------------------------
 // Calendars
 
 /** "Work: Q1/Q2" → "Work- Q1-Q2.ics", unique within the folder. */
@@ -499,7 +495,6 @@ export function renameCalendar(fileId: string, name: string): void {
   });
 }
 
-// ---------------------------------------------------------------------------------------------
 // Subscriptions (online calendars copied into the folder)
 
 export function subscriptionOf(fileId: string): SubscriptionInfo | null {
@@ -597,7 +592,6 @@ export function setSubscriptionErrorHandler(
   subscriptionErrorHandler = handler;
 }
 
-// ---------------------------------------------------------------------------------------------
 // Saving
 
 function updateSaveStatus(): void {
@@ -644,7 +638,7 @@ async function runSave(fileId: string): Promise<void> {
   const generation = loadGeneration;
 
   try {
-    // Conflict detection: someone (another device, a sync tool…) changed the file since we
+    // Conflict detection: someone (another device, a sync tool...) changed the file since we
     // loaded or last saved it.
     const meta = await storage().getMeta(fileId);
     if (meta.modifiedTime !== calendar.modifiedTime) {

@@ -8,7 +8,7 @@ interface StoredFile {
 
 /**
  * In-memory StorageProvider for tests: one folder of files plus settings. Every upload/create
- * gets a new modifiedTime ("t2", "t3"…), like a real store would.
+ * gets a new modifiedTime ("t2", "t3"...), like a real store would.
  */
 export class FakeStorage implements StorageProvider {
   readonly id = 'fake';

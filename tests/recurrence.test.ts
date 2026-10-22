@@ -9,7 +9,7 @@ function expand(file: string, start: string, end: string) {
   return expandCalendar(parseIcs(fixture(file)), 'file-1', range(start, end));
 }
 
-describe('expandCalendar — single event', () => {
+describe('expandCalendar: single event', () => {
   it('returns the event with its details', () => {
     const [event, ...rest] = expand('single-event.ics', '2025-03-01', '2025-04-01');
     expect(rest).toHaveLength(0);
@@ -32,7 +32,7 @@ describe('expandCalendar — single event', () => {
   });
 });
 
-describe('expandCalendar — all-day events', () => {
+describe('expandCalendar: all-day events', () => {
   it('uses date-only inputs and an exclusive end date', () => {
     const events = expand('all-day.ics', '2025-04-01', '2025-05-01');
     const conf = events.find((e) => e.uid === 'allday-1@test');
@@ -50,7 +50,7 @@ describe('expandCalendar — all-day events', () => {
   });
 });
 
-describe('expandCalendar — weekly RRULE with EXDATE and override', () => {
+describe('expandCalendar: weekly RRULE with EXDATE and override', () => {
   const events = expand('weekly-exdate.ics', '2025-01-01', '2025-03-01');
   const starts = events.map((e) => e.startInput).sort();
 
@@ -78,7 +78,7 @@ describe('expandCalendar — weekly RRULE with EXDATE and override', () => {
   });
 });
 
-describe('expandCalendar — VTIMEZONE', () => {
+describe('expandCalendar: VTIMEZONE', () => {
   it('converts zoned times to the correct UTC instants across a DST change', () => {
     const events = expand('vtimezone.ics', '2025-03-01', '2025-04-01');
     expect(events.map((e) => e.startInput).sort()).toEqual([
@@ -89,7 +89,7 @@ describe('expandCalendar — VTIMEZONE', () => {
   });
 });
 
-describe('expandCalendar — TZID without VTIMEZONE and floating times', () => {
+describe('expandCalendar: TZID without VTIMEZONE and floating times', () => {
   const events = expand('missing-vtimezone.ics', '2025-06-25', '2025-07-10');
 
   it('falls back to Intl for IANA TZIDs that have no VTIMEZONE', () => {
@@ -104,7 +104,7 @@ describe('expandCalendar — TZID without VTIMEZONE and floating times', () => {
   });
 });
 
-describe('expandCalendar — safety', () => {
+describe('expandCalendar: safety', () => {
   it('stops iterating unbounded rules after the range end', () => {
     const ics = [
       'BEGIN:VCALENDAR',

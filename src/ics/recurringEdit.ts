@@ -136,8 +136,6 @@ function untilBefore(rid: ICAL.Time, dtstart: ICAL.Time, tzid: string | null): I
   return ICAL.Time.fromJSDate(new Date(instantMs(rid, tzid) - 1000), true);
 }
 
-// ---------------------------------------------------------------------------------------------
-
 /** The series' rule for the editor: a SimpleRule, or `custom` when it can't be represented. */
 export function seriesRule(
   vcalendar: ICAL.Component,
@@ -381,7 +379,7 @@ export function editFollowing(
     return ref.uid;
   }
 
-  // The new series: a copy of the old one (keeps alarms, attendees, X- properties…).
+  // The new series: a copy of the old one (keeps alarms, attendees, X- properties...).
   const series = new ICAL.Component(structuredClone(master.toJSON()));
   initNewEvent(series, newUid, now);
   series.removeAllProperties('exdate');

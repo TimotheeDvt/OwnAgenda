@@ -125,7 +125,6 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   return btn;
 }
 
-// ---------------------------------------------------------------------------------------------
 // Header
 
 function renderUser(user: StorageUser | null): void {
@@ -156,7 +155,7 @@ function renderUser(user: StorageUser | null): void {
 
 const SAVE_LABELS: Record<CalendarState['saveStatus'], string> = {
   idle: '',
-  saving: 'Saving…',
+  saving: 'Saving...',
   saved: 'All changes saved',
   unsaved: 'Unsaved changes',
   error: 'Not saved',
@@ -173,7 +172,7 @@ function formatSavedAt(iso: string | null): string {
   });
 }
 
-/** Save status, or — when nothing can be changed — a small warning (plus Reconnect). */
+/** Save status, or a small warning when nothing can be changed (plus Reconnect). */
 function renderSaveStatus(state: CalendarState): void {
   const el = layout.saveStatus;
   if (state.readOnly) {
@@ -218,7 +217,6 @@ function setTheme(theme: Theme): void {
   if (sidebar && getSettings().theme !== theme) updateSettings({ theme });
 }
 
-// ---------------------------------------------------------------------------------------------
 // Sidebar drawer (narrow screens)
 
 function setDrawer(open: boolean): void {
@@ -226,7 +224,6 @@ function setDrawer(open: boolean): void {
   layout.menu.setAttribute('aria-expanded', String(open));
 }
 
-// ---------------------------------------------------------------------------------------------
 // Screens
 
 function renderSignedOut(): void {
@@ -272,7 +269,6 @@ function renderFatal(message: string): void {
   layout.main.replaceChildren(box);
 }
 
-// ---------------------------------------------------------------------------------------------
 // Actions
 
 /** Shows why an action isn't possible while read-only. Returns true if it is. */
@@ -383,7 +379,7 @@ async function subscribe(): Promise<void> {
       'Its events are read-only.',
     fields: [
       { name: 'name', label: 'Name', placeholder: 'AMU lessons' },
-      { name: 'url', label: 'Calendar link', type: 'url', placeholder: 'https://… or webcal://…' },
+      { name: 'url', label: 'Calendar link', type: 'url', placeholder: 'https://... or webcal://...' },
     ],
     submitLabel: 'Subscribe',
   });
@@ -411,7 +407,7 @@ async function setCorsProxy(): Promise<void> {
         label: 'Proxy URL',
         type: 'url',
         value: getSettings().corsProxy,
-        placeholder: 'https://…/?url={url}',
+        placeholder: 'https://.../?url={url}',
         optional: true,
       },
     ],
@@ -469,7 +465,6 @@ async function toggleOfflineCache(enabled: boolean): Promise<void> {
   else await clearSnapshot();
 }
 
-// ---------------------------------------------------------------------------------------------
 // Offline copy
 
 function scheduleSnapshot(): void {
@@ -511,7 +506,6 @@ async function showOfflineCopy(email: string | null): Promise<boolean> {
   return true;
 }
 
-// ---------------------------------------------------------------------------------------------
 // Session
 
 function mountMain(): void {

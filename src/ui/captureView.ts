@@ -32,9 +32,9 @@ export function captureToClipboard(
   }
   navigator.clipboard
     .write([new ClipboardItem({ 'image/png': png })])
-    .then(() => showToast('Calendar view copied — paste it anywhere.', 'success'))
+    .then(() => showToast('Calendar view copied. Paste it anywhere.', 'success'))
     .catch(async (err: unknown) => {
-      // Clipboard refused (permissions, unfocused page…): fall back to a download.
+      // Clipboard refused (permissions, unfocused page...): fall back to a download.
       try {
         await download();
       } catch {

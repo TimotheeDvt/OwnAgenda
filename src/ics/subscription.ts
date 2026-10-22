@@ -5,7 +5,7 @@ import { parseIcs } from './parse';
  * A subscription is an ordinary .ics file in the Drive folder that carries where it comes from
  * and when it was last downloaded, as X- properties on the VCALENDAR:
  *
- *   X-OWNAGENDA-SOURCE-URL:https://…/calendar.ics
+ *   X-OWNAGENDA-SOURCE-URL:https://.../calendar.ics
  *   X-OWNAGENDA-LAST-UPDATE:2025-03-01T08:00:00.000Z
  *
  * Its events are a copy of the online calendar, so they are read-only in the app.
@@ -44,7 +44,7 @@ export function normalizeSubscriptionUrl(input: string): string {
   try {
     url = new URL(trimmed);
   } catch {
-    throw new Error('Please enter a valid calendar link (https://…).');
+    throw new Error('Please enter a valid calendar link (https://...).');
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('The calendar link must start with https:// (or webcal://).');

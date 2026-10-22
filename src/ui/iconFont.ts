@@ -1,5 +1,5 @@
-// Calendar icons use the Material Design Icons font — the same icons as Nerd Fonts' "nf-md-*"
-// set, at the same codepoints (U+F0001…), so an icon copied from the Nerd Fonts cheat sheet
+// Calendar icons use the Material Design Icons font, the same icons as Nerd Fonts' "nf-md-*"
+// set, at the same codepoints (U+F0001...), so an icon copied from the Nerd Fonts cheat sheet
 // shows correctly. Emoji keep working as before (they come from the system's emoji font).
 import fontUrl from '@mdi/font/fonts/materialdesignicons-webfont.woff2?url';
 

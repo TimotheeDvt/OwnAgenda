@@ -41,7 +41,7 @@ export interface CalendarView {
 export const NARROW_QUERY = '(max-width: 720px)';
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
-  // 'capture' (camera, only shown in list view — see CSS) sits just left of the view buttons.
+  // 'capture' (camera, only shown in list view, see CSS) sits just left of the view buttons.
   header: { left: 'prev,next today', center: 'title', right: `capture ${VIEW_NAMES.join(',')}` },
   footer: false,
 };

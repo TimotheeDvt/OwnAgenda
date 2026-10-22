@@ -96,7 +96,6 @@ describe('fetchRemoteCalendar', () => {
   });
 });
 
-// ---------------------------------------------------------------------------------------------
 // Store: subscribe, daily update, read-only
 
 // The store runs against an in-memory StorageProvider (no Drive, no network).

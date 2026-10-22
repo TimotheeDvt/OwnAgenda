@@ -2,7 +2,7 @@ import { normalizeTime } from '../util/dates';
 
 const STEP_MINUTES = 30;
 
-/** "00:00", "00:30", … "23:30". */
+/** "00:00", "00:30", ... "23:30". */
 export const HALF_HOURS: string[] = Array.from({ length: (24 * 60) / STEP_MINUTES }, (_, i) => {
   const minutes = i * STEP_MINUTES;
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;

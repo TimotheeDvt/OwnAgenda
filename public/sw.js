@@ -89,7 +89,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }
-  // Anything else outside the app (Drive API, online calendars…) goes straight to the network.
+  // Anything else outside the app (Drive API, online calendars...) goes straight to the network.
   if (!url.href.startsWith(scopeUrl().href)) return;
 
   if (request.mode === 'navigate') event.respondWith(networkFirstPage(request));

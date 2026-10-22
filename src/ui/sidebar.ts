@@ -189,7 +189,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     title.appendChild(
       statusIcon(
         'refresh',
-        state.calendars.length ? 'Updating from Google Drive…' : 'Loading…',
+        state.calendars.length ? 'Updating from Google Drive...' : 'Loading...',
         true,
       ),
     );
