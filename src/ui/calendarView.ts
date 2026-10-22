@@ -99,6 +99,13 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
   }
 }
 
+const LIST_REFRESH_MS = 60_000;
+
+/** Events that haven't ended yet (ongoing or future). */
+function upcomingOnly(events: AgendaEvent[], now: Date): AgendaEvent[] {
+  return events.filter((e) => e.end.getTime() > now.getTime());
+}
+
 function tooltip(event: AgendaEvent): string {
   return [
     event.title || '(No title)',
@@ -147,6 +154,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const narrow = window.matchMedia(NARROW_QUERY);
   const toolbar = () => (narrow.matches ? NARROW_TOOLBAR : WIDE_TOOLBAR);
 
+  // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
+  let currentView: string = initial.defaultView;
   const calendar = new Calendar(host, {
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, intlTimeZonePlugin],
     initialView: initial.defaultView,
@@ -201,10 +210,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       });
     },
     events: (info, success) => {
-      const events = eventsInRange(
+      let events = eventsInRange(
         { start: info.start, end: info.end },
         (cal) => getCalendarSettings(cal.fileId, calendarIndex(cal.fileId)).visible,
       );
+      // The list is an agenda of what's ahead: hide events that are already over (ongoing ones
+      // stay, and full-day events stay until the day ends).
+      if (currentView.startsWith('list')) events = upcomingOnly(events, new Date());
       const subscribed = new Set(
         getCalendarState()
           .calendars.filter((c) => subscriptionOf(c.fileId))
@@ -223,6 +235,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     datesSet: (arg) => {
       placeCaptureCorner();
       const view = arg.view.type as ViewName;
+      // Same dates in another view reuse the loaded events; reload so the list view can leave
+      // out past events (and other views show them again).
+      if (view !== currentView) {
+        currentView = view;
+        queueMicrotask(() => calendar.refetchEvents());
+      }
       if (VIEW_NAMES.includes(view) && view !== getSettings().defaultView) {
         updateSettings({ defaultView: view });
       }
@@ -230,6 +248,11 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   });
   calendar.render();
   placeCaptureCorner();
+
+  // In list view, drop events from the list as they end while the app stays open.
+  const listRefresh = setInterval(() => {
+    if (calendar.view.type.startsWith('list')) calendar.refetchEvents();
+  }, LIST_REFRESH_MS);
 
   const onResize = () => {
     calendar.setOption('headerToolbar', toolbar().header);
@@ -271,6 +294,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     showEvent: (event) => calendar.gotoDate(event.startInput),
     updateSize: () => calendar.updateSize(),
     destroy() {
+      clearInterval(listRefresh);
       narrow.removeEventListener('change', onResize);
       offSettings();
       offCalendars();
