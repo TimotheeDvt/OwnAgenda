@@ -156,6 +156,27 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
   }
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The view and date kept in the URL (?view=…&date=YYYY-MM-DD), so a reload stays there. */
+function readUrlPosition(): { view?: ViewName; date?: string } {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view') as ViewName | null;
+  const date = params.get('date');
+  return {
+    view: view && VIEW_NAMES.includes(view) ? view : undefined,
+    date: date && ISO_DATE.test(date) && !Number.isNaN(Date.parse(date)) ? date : undefined,
+  };
+}
+
+/** Updates the URL in place (no new history entry for every period browsed). */
+function writeUrlPosition(view: string, date: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', view);
+  url.searchParams.set('date', date);
+  if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+}
+
 /** A horizontal swipe at least this long (px) and this quick (ms) changes the period. */
 const SWIPE_MIN_PX = 60;
 const SWIPE_MAX_MS = 600;
@@ -247,10 +268,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   // An event being dragged or resized: the finger moving is not a swipe.
   let dragging = false;
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
-  let currentView: string = initial.defaultView;
+  const fromUrl = readUrlPosition();
+  let currentView: string = fromUrl.view ?? initial.defaultView;
   const calendar = new Calendar(host, {
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, intlTimeZonePlugin],
-    initialView: initial.defaultView,
+    initialView: currentView,
+    // Reloading the page stays on the period that was shown (see writeUrlPosition).
+    ...(fromUrl.date ? { initialDate: fromUrl.date } : {}),
     // English with day-before-month dates (e.g. titles: "20 – 26 Oct 2026").
     locale: 'en-GB',
     firstDay: initial.weekStartsOn,
@@ -359,6 +383,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       if (VIEW_NAMES.includes(view) && view !== getSettings().defaultView) {
         updateSettings({ defaultView: view });
       }
+      // The first day shown, in the calendar's time zone.
+      writeUrlPosition(view, calendar.formatIso(arg.view.currentStart, true).slice(0, 10));
     },
   });
   calendar.render();
