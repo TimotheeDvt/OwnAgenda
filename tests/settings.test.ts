@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { defaultSettings, normalizeSettings } from '../src/store/settingsStore';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  defaultSettings,
+  getSettings,
+  moveCalendar,
+  normalizeSettings,
+  orderCalendars,
+  resetSettings,
+  updateSettings,
+} from '../src/store/settingsStore';
 
 describe('normalizeSettings', () => {
   it('returns defaults for missing or invalid input', () => {
@@ -44,5 +52,40 @@ describe('normalizeSettings', () => {
   it('preserves unknown fields so newer settings are not lost', () => {
     const s = normalizeSettings({ futureOption: 42 }) as unknown as Record<string, unknown>;
     expect(s.futureOption).toBe(42);
+  });
+});
+
+describe('calendar order', () => {
+  const cal = (fileId: string) => ({ fileId });
+  const ids = (list: { fileId: string }[]) => list.map((c) => c.fileId);
+
+  it('sorts by the saved order, with unknown calendars after in their original order', () => {
+    const list = [cal('a'), cal('b'), cal('c'), cal('d')];
+    expect(ids(orderCalendars(list, ['c', 'a']))).toEqual(['c', 'a', 'b', 'd']);
+    expect(ids(orderCalendars(list, []))).toEqual(['a', 'b', 'c', 'd']);
+    expect(ids(orderCalendars(list, ['gone', 'd']))).toEqual(['d', 'a', 'b', 'c']);
+  });
+
+  it('moves a calendar and keeps hidden ones at the end of the saved order', () => {
+    vi.useFakeTimers();
+    try {
+      resetSettings();
+      updateSettings({ calendarOrder: ['x', 'a', 'b'] });
+      moveCalendar(['a', 'b', 'c'], 2, 0);
+      expect(getSettings().calendarOrder).toEqual(['c', 'a', 'b', 'x']);
+      moveCalendar(['c', 'a', 'b'], 0, 2);
+      expect(getSettings().calendarOrder).toEqual(['a', 'b', 'c', 'x']);
+    } finally {
+      resetSettings();
+      vi.useRealTimers();
+    }
+  });
+
+  it('normalizes the saved order', () => {
+    expect(normalizeSettings({ calendarOrder: ['a', 1, 'a', 'b'] }).calendarOrder).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(normalizeSettings({ calendarOrder: 'nope' }).calendarOrder).toEqual([]);
   });
 });

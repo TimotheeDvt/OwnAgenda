@@ -11,7 +11,7 @@ import {
   ruleOfEvent,
   subscriptionOf,
 } from '../store/calendarStore';
-import { getCalendarSettings, getSettings } from '../store/settingsStore';
+import { getCalendarSettings, getSettings, orderCalendars } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { instantToWall, wallToInstant } from '../util/dates';
 import { chooseOption, type Choice } from './choiceDialog';
@@ -23,8 +23,8 @@ export type EventTimes = Pick<EventDraft, 'allDay' | 'start' | 'end'>;
 
 /** Calendars events can be added to or moved to (subscribed calendars are read-only). */
 function calendarOptions(): CalendarOption[] {
-  return getCalendarState()
-    .calendars.filter((c) => !subscriptionOf(c.fileId))
+  return orderCalendars(getCalendarState().calendars)
+    .filter((c) => !subscriptionOf(c.fileId))
     .map(({ fileId, displayName }) => ({ fileId, displayName }));
 }
 

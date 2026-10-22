@@ -1075,3 +1075,37 @@ kbd {
 .prompt-field + .prompt-field {
   margin-top: 12px;
 }
+
+/* Reordering calendars */
+
+.drag-handle {
+  width: 18px;
+  margin-left: -4px;
+  cursor: grab;
+  /* Let pointer events drive the drag on touch screens instead of scrolling. */
+  touch-action: none;
+}
+
+.calendar-list.is-reordering,
+.calendar-list.is-reordering .drag-handle {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.calendar-item.is-dragging {
+  background: var(--surface-hover);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+@media (hover: hover) {
+  .calendar-item .drag-handle {
+    opacity: 0;
+  }
+
+  .calendar-item:hover .drag-handle,
+  .calendar-item .drag-handle:focus-visible,
+  .calendar-list.is-reordering .drag-handle {
+    opacity: 1;
+  }
+}

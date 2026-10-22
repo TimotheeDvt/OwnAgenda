@@ -25,6 +25,8 @@ export interface Settings {
    * A URL template where {url} is replaced by the encoded calendar link. Empty = direct.
    */
   corsProxy: string;
+  /** File IDs in the order chosen in the sidebar; calendars not listed come after, by name. */
+  calendarOrder: string[];
   calendars: Record<string, CalendarSettings>;
 }
 
@@ -40,6 +42,7 @@ export function defaultSettings(): Settings {
     theme: 'system',
     offlineCache: true,
     corsProxy: '',
+    calendarOrder: [],
     calendars: {},
   };
 }
@@ -89,6 +92,9 @@ export function normalizeSettings(raw: unknown): Settings {
     theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : defaults.theme,
     offlineCache: typeof raw.offlineCache === 'boolean' ? raw.offlineCache : defaults.offlineCache,
     corsProxy: typeof raw.corsProxy === 'string' ? raw.corsProxy.trim() : defaults.corsProxy,
+    calendarOrder: Array.isArray(raw.calendarOrder)
+      ? [...new Set(raw.calendarOrder.filter((id): id is string => typeof id === 'string'))]
+      : defaults.calendarOrder,
     calendars,
   };
 }
@@ -133,6 +139,35 @@ export function updateSettings(patch: Partial<Settings>): void {
 }
 
 /** The saved settings for a calendar, or defaults (color picked by its position in the list). */
+/**
+ * Sorts calendars by the saved order. Calendars missing from it (new files) keep their relative
+ * order after the ordered ones.
+ */
+export function orderCalendars<T extends { fileId: string }>(
+  items: T[],
+  order: string[] = settings.calendarOrder,
+): T[] {
+  const position = new Map(order.map((id, i) => [id, i]));
+  return items
+    .map((item, i) => ({ item, key: position.get(item.fileId) ?? order.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ item }) => item);
+}
+
+/**
+ * Moves the calendar at `from` to `to` within the displayed list and saves the new order.
+ * IDs of calendars not currently shown (e.g. a file that failed to load) keep their place at the
+ * end, so they come back where they were.
+ */
+export function moveCalendar(displayedIds: string[], from: number, to: number): void {
+  if (from === to || from < 0 || to < 0 || from >= displayedIds.length) return;
+  const ids = [...displayedIds];
+  const [moved] = ids.splice(from, 1);
+  ids.splice(Math.min(to, ids.length), 0, moved!);
+  const hidden = settings.calendarOrder.filter((id) => !displayedIds.includes(id));
+  updateSettings({ calendarOrder: [...ids, ...hidden] });
+}
+
 export function getCalendarSettings(fileId: string, index: number): CalendarSettings {
   const fallbackColor =
     DEFAULT_CALENDAR_COLORS[Math.max(index, 0) % DEFAULT_CALENDAR_COLORS.length] ?? '#3b82f6';

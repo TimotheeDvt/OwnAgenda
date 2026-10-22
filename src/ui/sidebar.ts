@@ -7,7 +7,9 @@ import {
 import {
   getCalendarSettings,
   getSettings,
+  moveCalendar,
   onSettingsChange,
+  orderCalendars,
   updateCalendarSettings,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
@@ -97,6 +99,58 @@ function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElemen
   return [row];
 }
 
+/** After a keyboard move the list re-renders: put focus back on the moved calendar's handle. */
+let focusAfterRender: string | null = null;
+
+/**
+ * Pointer-based drag (mouse, pen and touch alike): the row follows the pointer by moving in the
+ * list as it crosses the middle of its neighbours. The new order is saved on release.
+ */
+function startDrag(
+  e: PointerEvent,
+  handle: HTMLElement,
+  list: HTMLUListElement,
+  orderedIds: string[],
+): void {
+  if (e.button !== 0) return;
+  const item = handle.closest<HTMLLIElement>('li');
+  if (!item) return;
+  e.preventDefault();
+  handle.setPointerCapture(e.pointerId);
+  const from = [...list.children].indexOf(item);
+  item.classList.add('is-dragging');
+  list.classList.add('is-reordering');
+
+  const middle = (el: Element) => {
+    const rect = el.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  };
+  const onMove = (ev: PointerEvent) => {
+    let prev = item.previousElementSibling;
+    while (prev && ev.clientY < middle(prev)) {
+      list.insertBefore(item, prev);
+      prev = item.previousElementSibling;
+    }
+    let next = item.nextElementSibling;
+    while (next && ev.clientY > middle(next)) {
+      list.insertBefore(next, item);
+      next = item.nextElementSibling;
+    }
+  };
+  const onEnd = () => {
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onEnd);
+    handle.removeEventListener('pointercancel', onEnd);
+    item.classList.remove('is-dragging');
+    list.classList.remove('is-reordering');
+    const to = [...list.children].indexOf(item);
+    if (to !== from) moveCalendar(orderedIds, from, to);
+  };
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onEnd);
+  handle.addEventListener('pointercancel', onEnd);
+}
+
 function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLElement[] {
   const nodes: HTMLElement[] = [el('h2', 'sidebar-title', 'Calendars')];
 
@@ -108,9 +162,32 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
   if (state.error) nodes.push(el('p', 'sidebar-error', state.error));
 
   const list = el('ul', 'calendar-list');
-  state.calendars.forEach((calendar, index) => {
+  const ordered = orderCalendars(state.calendars);
+  const orderedIds = ordered.map((c) => c.fileId);
+  ordered.forEach((calendar, position) => {
+    // Default colors follow the stable name order, so reordering doesn't change them.
+    const index = state.calendars.indexOf(calendar);
     const settings = getCalendarSettings(calendar.fileId, index);
     const item = el('li', 'calendar-item');
+    item.dataset.fileId = calendar.fileId;
+
+    const handle = el('button', 'icon-btn drag-handle');
+    handle.type = 'button';
+    handle.innerHTML = ICONS.grip;
+    handle.title = 'Drag to reorder (or use the arrow keys)';
+    handle.setAttribute(
+      'aria-label',
+      `Move ${calendar.displayName}, position ${position + 1} of ${ordered.length}. ` +
+        'Use the up and down arrow keys.',
+    );
+    handle.addEventListener('keydown', (e) => {
+      const to = e.key === 'ArrowUp' ? position - 1 : e.key === 'ArrowDown' ? position + 1 : -1;
+      if (to < 0 || to >= ordered.length) return;
+      e.preventDefault();
+      focusAfterRender = calendar.fileId;
+      moveCalendar(orderedIds, position, to);
+    });
+    handle.addEventListener('pointerdown', (e) => startDrag(e, handle, list, orderedIds));
 
     const visible = el('input');
     visible.type = 'checkbox';
@@ -163,7 +240,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
     const tools = el('span', 'calendar-tools');
     tools.append(rename, refresh);
-    item.append(color, label, tools);
+    item.append(handle, color, label, tools);
     list.appendChild(item);
   });
   nodes.push(list);
@@ -232,6 +309,14 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
     folderSection.replaceChildren(...renderFolder(actions, state));
     calendarsSection.replaceChildren(...renderCalendars(actions, state));
     optionsSection.replaceChildren(...renderOptions(actions));
+    if (focusAfterRender) {
+      calendarsSection
+        .querySelector<HTMLElement>(
+          `li[data-file-id="${CSS.escape(focusAfterRender)}"] .drag-handle`,
+        )
+        ?.focus();
+      focusAfterRender = null;
+    }
   };
   render();
   const offCalendars = onCalendarsChange(render);
