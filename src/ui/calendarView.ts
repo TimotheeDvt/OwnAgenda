@@ -101,6 +101,52 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
   }
 }
 
+/** A horizontal swipe at least this long (px) and this quick (ms) changes the period. */
+const SWIPE_MIN_PX = 60;
+const SWIPE_MAX_MS = 600;
+
+/**
+ * Swipe left/right on touch screens to go to the next/previous period (day, week, month). Mostly
+ * horizontal, quick swipes only, so vertical scrolling and long-press drags aren't mistaken for one.
+ */
+function listenForSwipes(
+  host: HTMLElement,
+  isBusy: () => boolean,
+  go: (direction: 'prev' | 'next') => void,
+): () => void {
+  let start: { x: number; y: number; time: number } | null = null;
+  const onStart = (e: TouchEvent) => {
+    const touch = e.touches[0];
+    // Pinch zoom and other multi-finger gestures aren't swipes.
+    start =
+      e.touches.length === 1 && touch
+        ? { x: touch.clientX, y: touch.clientY, time: e.timeStamp }
+        : null;
+  };
+  const onEnd = (e: TouchEvent) => {
+    const touch = e.changedTouches[0];
+    if (!start || !touch || isBusy()) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const quick = e.timeStamp - start.time <= SWIPE_MAX_MS;
+    start = null;
+    if (quick && Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > 2 * Math.abs(dy)) {
+      go(dx < 0 ? 'next' : 'prev');
+    }
+  };
+  const onCancel = () => {
+    start = null;
+  };
+  host.addEventListener('touchstart', onStart, { passive: true });
+  host.addEventListener('touchend', onEnd, { passive: true });
+  host.addEventListener('touchcancel', onCancel, { passive: true });
+  return () => {
+    host.removeEventListener('touchstart', onStart);
+    host.removeEventListener('touchend', onEnd);
+    host.removeEventListener('touchcancel', onCancel);
+  };
+}
+
 const LIST_REFRESH_MS = 60_000;
 
 /** Events that haven't ended yet (ongoing or future). */
@@ -157,6 +203,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const toolbar = () => (narrow.matches ? NARROW_TOOLBAR : WIDE_TOOLBAR);
   const slotLabelFormat = () => (narrow.matches ? NARROW_SLOT_LABEL : WIDE_SLOT_LABEL);
 
+  // An event being dragged or resized: the finger moving is not a swipe.
+  let dragging = false;
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
   let currentView: string = initial.defaultView;
   const calendar = new Calendar(host, {
@@ -201,6 +249,11 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       const agendaEvent = agendaEventOf(info.event);
       if (agendaEvent) void openEvent(agendaEvent);
     },
+    // Cleared after the touchend of the drag itself has been handled (not a swipe either).
+    eventDragStart: () => (dragging = true),
+    eventDragStop: () => setTimeout(() => (dragging = false)),
+    eventResizeStart: () => (dragging = true),
+    eventResizeStop: () => setTimeout(() => (dragging = false)),
     eventChange: (info) => {
       const agendaEvent = agendaEventOf(info.event);
       const times = timesOf(info.event);
@@ -253,6 +306,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   placeCaptureCorner();
 
   // In list view, drop events from the list as they end while the app stays open.
+  const offSwipes = listenForSwipes(
+    host,
+    // Not while dragging an event, nor with the "+N more" popover open.
+    () => dragging || host.querySelector('.fc-popover') !== null,
+    (direction) => (direction === 'next' ? calendar.next() : calendar.prev()),
+  );
+
   const listRefresh = setInterval(() => {
     if (calendar.view.type.startsWith('list')) calendar.refetchEvents();
   }, LIST_REFRESH_MS);
@@ -299,6 +359,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     updateSize: () => calendar.updateSize(),
     destroy() {
       clearInterval(listRefresh);
+      offSwipes();
       narrow.removeEventListener('change', onResize);
       offSettings();
       offCalendars();
