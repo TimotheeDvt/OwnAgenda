@@ -5,6 +5,7 @@ import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
 export const VIEW_NAMES = [
   'dayGridMonth',
+  'dayGridThreeWeek',
   'timeGridWeek',
   'timeGrid3Day',
   'timeGridDay',

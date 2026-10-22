@@ -58,11 +58,18 @@ export interface CalendarView {
 export const NARROW_QUERY = '(max-width: 720px)';
 
 /** One button per view on computers; phones get every view (3 days too) in a menu. */
-const WIDE_VIEW_BUTTONS: ViewName[] = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'];
+const WIDE_VIEW_BUTTONS: ViewName[] = [
+  'dayGridMonth',
+  'dayGridThreeWeek',
+  'timeGridWeek',
+  'timeGridDay',
+  'listWeek',
+];
 
 /** Menu labels, and the short names used in the URL. */
 const VIEWS: Record<ViewName, { label: string; url: string }> = {
   dayGridMonth: { label: 'Month', url: 'month' },
+  dayGridThreeWeek: { label: 'Two weeks', url: '2weeks' },
   timeGridWeek: { label: 'Week', url: 'week' },
   timeGrid3Day: { label: '3 days', url: '3days' },
   timeGridDay: { label: 'Day', url: 'day' },
@@ -329,7 +336,16 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
           }),
       },
     },
-    views: { timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } } },
+    views: {
+      // Two rows of seven days, like the month grid; just the event names (no times).
+      dayGridThreeWeek: {
+        type: 'dayGrid',
+        duration: { weeks: 3 },
+        buttonText: '3 weeks',
+        displayEventTime: false,
+      },
+      timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } },
+    },
     // No label next to the all-day row.
     allDayText: '',
     dayHeaderContent,

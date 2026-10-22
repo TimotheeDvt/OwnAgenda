@@ -1589,6 +1589,14 @@ kbd {
   line-height: 1.6;
 }
 
+/* Two weeks view: the date with its month name, on the first day and on the first of a month
+   ("1 November"), small and discreet instead of FullCalendar's larger bold label. */
+.calendar-host.fc .fc-dayGridTwoWeek-view .fc-daygrid-month-start {
+  font-size: 0.8em;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 /* FullCalendar's own box around them (month view) is dropped: only the pill shows. */
 .calendar-host.fc .fc-daygrid-week-number {
   top: 3px;
