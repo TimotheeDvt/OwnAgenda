@@ -578,11 +578,22 @@ code {
   gap: 8px;
 }
 
-.event-form .all-day .time-input {
+/* Start and end stacked; with Full day, the times hide and the two dates share one row.
+   (The all-day class is on the form itself.) */
+.event-form .when {
+  display: grid;
+  gap: 12px;
+}
+
+.event-form.all-day .when {
+  grid-template-columns: 1fr 1fr;
+}
+
+.event-form.all-day .time-field {
   display: none;
 }
 
-.event-form .all-day .datetime-row {
+.event-form.all-day .datetime-row {
   grid-template-columns: 1fr;
 }
 
@@ -1231,4 +1242,155 @@ kbd {
 .drag-handle svg {
   width: 25px;
   height: 25px;
+}
+
+/* Full day / Evening / Custom switch in the event dialog. */
+
+.event-form .segmented {
+  display: inline-flex;
+  justify-self: center;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.event-form .segmented label {
+  position: relative;
+  font-size: 0.85rem;
+}
+
+.event-form .segmented input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.event-form .segmented span {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.event-form .segmented input:checked + span {
+  background: var(--primary);
+  color: #fff;
+}
+
+.event-form .segmented input:focus-visible + span {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.event-form .segmented input:disabled {
+  cursor: default;
+}
+
+/* Time field with its clock button and half-hour list. */
+
+/* The clock sits inside the box, at the right end, like the date field's calendar icon. */
+.event-form .time-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.event-form .time-field .time-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 34px;
+}
+
+.event-form .time-picker-btn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+}
+
+.time-picker-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.time-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.time-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.time-option:hover,
+.time-option:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.time-option.is-selected {
+  background: var(--primary);
+  color: #fff;
+}
+
+.time-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.time-option.is-selected .time-hint {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* The date field's calendar icon (drawn by the browser) gets the same hover effect as the clock
+   button. Works in Chrome, Edge and Safari; Firefox doesn't let pages style it. */
+.event-form input[type='date']::-webkit-calendar-picker-indicator {
+  padding: 5px;
+  margin-right: -2px;
+  border-radius: var(--radius);
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.event-form input[type='date']::-webkit-calendar-picker-indicator:hover {
+  background-color: var(--surface-hover);
+  opacity: 1;
+}
+
+.event-form input[type='date']:disabled::-webkit-calendar-picker-indicator {
+  cursor: default;
+}
+
+.event-form input[type='date']:disabled::-webkit-calendar-picker-indicator:hover {
+  background-color: transparent;
+  opacity: 0.65;
 }

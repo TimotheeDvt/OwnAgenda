@@ -9,6 +9,8 @@ import {
 } from '../ics/rrule';
 import { addDays, instantToWall, normalizeTime, wallToInstant } from '../util/dates';
 import { chooseOption } from './choiceDialog';
+import { ICONS } from './icons';
+import { attachTimeMenu, type TimeMenu } from './timeMenu';
 
 export interface CalendarOption {
   fileId: string;
@@ -32,6 +34,10 @@ export interface EventDialogOptions {
 /** `draft.rrule` is undefined when the repeat settings were not changed. */
 export type EventDialogResult =
   { action: 'save'; calendarFileId: string; draft: EventDraft } | { action: 'delete' } | null;
+
+/** Duration presets shown as a three-way switch in the dialog. */
+type DayMode = 'fullDay' | 'evening' | 'custom';
+const EVENING = { start: '19:00', end: '22:00' };
 
 const DEFAULT_START_TIME = '09:00';
 const DEFAULT_END_TIME = '10:00';
@@ -109,18 +115,30 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         <label class="field">Calendar
           <select name="calendar"></select>
         </label>
-        <label class="checkbox"><input name="allDay" type="checkbox" /> Full day</label>
+        <div class="segmented" role="radiogroup" aria-label="Duration">
+          <label><input type="radio" name="dayMode" value="fullDay" /><span>Full day</span></label>
+          <label><input type="radio" name="dayMode" value="evening" /><span>Evening</span></label>
+          <label><input type="radio" name="dayMode" value="custom" /><span>Custom</span></label>
+        </div>
+        <div class="when">
         <div class="field">Start
           <div class="datetime-row">
             <input name="startDate" type="date" aria-label="Start date" required />
-            <input name="startTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="Start time (24-hour, HH:MM)" />
+            <div class="time-field">
+              <input name="startTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="Start time (24-hour, HH:MM)" />
+              <button type="button" class="icon-btn time-picker-btn" data-for="startTime" aria-label="Choose start time" title="Choose a time"></button>
+            </div>
           </div>
         </div>
         <div class="field">End
           <div class="datetime-row">
             <input name="endDate" type="date" aria-label="End date" required />
-            <input name="endTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="End time (24-hour, HH:MM)" />
+            <div class="time-field">
+              <input name="endTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="End time (24-hour, HH:MM)" />
+              <button type="button" class="icon-btn time-picker-btn" data-for="endTime" aria-label="Choose end time" title="Choose a time"></button>
+            </div>
           </div>
+        </div>
         </div>
         <label class="field">Repeat
           <select name="freq">
@@ -171,7 +189,10 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       form.querySelector<T>(`[name="${name}"]`)!;
     const title = field<HTMLInputElement>('title');
     const calendar = field<HTMLSelectElement>('calendar');
-    const allDay = field<HTMLInputElement>('allDay');
+    const dayModes = [...form.querySelectorAll<HTMLInputElement>('input[name="dayMode"]')];
+    const dayMode = () => (dayModes.find((r) => r.checked)?.value ?? 'custom') as DayMode;
+    const setMode = (m: DayMode) => dayModes.forEach((r) => (r.checked = r.value === m));
+    const isFullDay = () => dayMode() === 'fullDay';
     const startDate = field<HTMLInputElement>('startDate');
     const startTime = field<HTMLInputElement>('startTime');
     const endDate = field<HTMLInputElement>('endDate');
@@ -202,7 +223,9 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
 
     const values = initialValues(draft, timeZone);
     title.value = draft.title;
-    allDay.checked = draft.allDay;
+    // Full day when created from the full-day row (or editing a full-day event), Custom otherwise.
+    // Evening is never preselected.
+    setMode(draft.allDay ? 'fullDay' : 'custom');
     startDate.value = values.startDate;
     startTime.value = values.startTime;
     endDate.value = values.endDate;
@@ -243,14 +266,13 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     for (const el of [freq, interval, endType]) el.addEventListener('input', syncRepeat);
     syncRepeat();
 
-    const syncAllDay = () => form.classList.toggle('all-day', allDay.checked);
-    allDay.addEventListener('change', syncAllDay);
-    syncAllDay();
+    const syncDayMode = () => form.classList.toggle('all-day', isFullDay());
+    syncDayMode();
 
     // Moving the start keeps the duration, like most calendar apps.
     let previousStart = { date: startDate.value, time: startTime.value };
     const shiftEnd = () => {
-      if (allDay.checked) {
+      if (isFullDay()) {
         const days = Math.round(
           (Date.parse(startDate.value) - Date.parse(previousStart.date)) / 86_400_000,
         );
@@ -277,12 +299,81 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     startDate.addEventListener('change', shiftEnd);
     startTime.addEventListener('change', shiftEnd);
 
+    // Full day / Evening / Custom. Evening fills 19:00–22:00 on the start day (still editable);
+    // going back to Custom restores the times that were there before.
+    let lastMode = dayMode();
+    let customTimes = { start: startTime.value, end: endTime.value, endDate: endDate.value };
+    for (const radio of dayModes) {
+      radio.addEventListener('change', () => {
+        const next = dayMode();
+        if (lastMode === 'custom') {
+          customTimes = { start: startTime.value, end: endTime.value, endDate: endDate.value };
+        }
+        if (next === 'evening') {
+          startTime.value = EVENING.start;
+          endTime.value = EVENING.end;
+          endDate.value = startDate.value;
+        } else if (next === 'custom' && lastMode === 'evening') {
+          startTime.value = customTimes.start;
+          endTime.value = customTimes.end;
+          endDate.value =
+            customTimes.endDate < startDate.value ? startDate.value : customTimes.endDate;
+        }
+        lastMode = next;
+        previousStart = { date: startDate.value, time: startTime.value };
+        syncDayMode();
+      });
+    }
+    // Editing the times of an evening makes it a custom event.
+    const leaveEveningIfEdited = () => {
+      if (dayMode() !== 'evening') return;
+      const isEvening =
+        normalizeTime(startTime.value) === EVENING.start &&
+        normalizeTime(endTime.value) === EVENING.end &&
+        endDate.value === startDate.value;
+      if (!isEvening) {
+        setMode('custom');
+        lastMode = 'custom';
+      }
+    };
+    for (const input of [startDate, startTime, endDate, endTime]) {
+      input.addEventListener('change', leaveEveningIfEdited);
+    }
+
+    // Clock buttons: pick a time from a half-hour list (the end list shows the duration).
+    const minutesOf = (time: string | null) =>
+      time ? Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) : NaN;
+    const durationHint = (time: string) => {
+      if (endDate.value !== startDate.value) return '';
+      const minutes = minutesOf(time) - minutesOf(normalizeTime(startTime.value));
+      if (!(minutes > 0)) return '';
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m}`;
+    };
+    const timeMenus: TimeMenu[] = [];
+    for (const btn of form.querySelectorAll<HTMLButtonElement>('.time-picker-btn')) {
+      btn.innerHTML = ICONS.clock;
+      const input = btn.dataset.for === 'endTime' ? endTime : startTime;
+      timeMenus.push(attachTimeMenu(input, btn, input === endTime ? durationHint : undefined));
+    }
+    // Escape closes an open time list first, not the dialog.
+    dialog.addEventListener('cancel', (e) => {
+      const open = timeMenus.find((m) => m.isOpen());
+      if (open) {
+        e.preventDefault();
+        open.close();
+      }
+    });
+
     deleteBtn.hidden = mode !== 'edit' || readOnly;
     if (readOnly) {
       const note = form.querySelector<HTMLElement>('.readonly-note')!;
       note.textContent = options.readOnlyNote ?? '';
       note.hidden = false;
-      for (const input of form.querySelectorAll<HTMLInputElement>('input, select, textarea')) {
+      for (const input of form.querySelectorAll<HTMLInputElement>(
+        'input, select, textarea, .time-picker-btn',
+      )) {
         input.disabled = true;
       }
       form.querySelector<HTMLButtonElement>('button[type="submit"]')!.hidden = true;
@@ -350,7 +441,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         description: description.value.trim() || undefined,
         ...(rrule !== undefined ? { rrule } : {}),
       };
-      if (allDay.checked) {
+      if (isFullDay()) {
         if (endDate.value < startDate.value) {
           showError('The end date is before the start date.');
           return null;
