@@ -30,6 +30,8 @@ export interface CalendarView {
   changeView(view: ViewName): void;
   /** Navigates to the date of an event (e.g. a search result). */
   showEvent(event: AgendaEvent): void;
+  /** Re-measures the calendar after its container changed size (e.g. sidebar resized). */
+  updateSize(): void;
   destroy(): void;
 }
 
@@ -189,6 +191,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     next: () => calendar.next(),
     changeView: (view) => calendar.changeView(view),
     showEvent: (event) => calendar.gotoDate(event.startInput),
+    updateSize: () => calendar.updateSize(),
     destroy() {
       narrow.removeEventListener('change', onResize);
       offSettings();

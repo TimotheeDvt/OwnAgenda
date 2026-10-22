@@ -1475,3 +1475,53 @@ kbd {
 .calendar-label {
   cursor: default;
 }
+
+/* Sidebar resize handle: a thin strip over the sidebar's right border. */
+
+.sidebar-resizer {
+  position: relative;
+  z-index: 5;
+  flex: none;
+  width: 8px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.is-resizing-sidebar .sidebar-resizer::after {
+  background: var(--primary);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+/* While dragging: no text selection, and the resize cursor everywhere. */
+body.is-resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* No handle when the sidebar is hidden (signed out) or is a drawer (narrow screens). */
+.sidebar[hidden] ~ .sidebar-resizer {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .sidebar-resizer {
+    display: none;
+  }
+}

@@ -44,6 +44,7 @@ import { createEventNow, openEvent } from './eventActions';
 import { ICONS } from './icons';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
 import { mountSidebar, type Sidebar } from './sidebar';
+import { setupSidebarResize } from './sidebarResize';
 import { promptFolderPath, promptForm, promptText } from './textPrompt';
 import { applyTheme, cachedTheme, mountThemeSwitch } from './theme';
 import { showToast } from './toast';
@@ -55,6 +56,7 @@ interface Layout {
   user: HTMLElement;
   sidebar: HTMLElement;
   backdrop: HTMLElement;
+  resizer: HTMLElement;
   main: HTMLElement;
 }
 
@@ -82,6 +84,7 @@ function renderLayout(root: HTMLElement): Layout {
     </header>
     <div class="app-body">
       <aside class="sidebar" id="sidebar" aria-label="Calendars"></aside>
+      <div class="sidebar-resizer"></div>
       <div class="sidebar-backdrop"></div>
       <main class="calendar-host"></main>
     </div>`;
@@ -92,6 +95,7 @@ function renderLayout(root: HTMLElement): Layout {
     user: root.querySelector('.header-user')!,
     sidebar: root.querySelector('.sidebar')!,
     backdrop: root.querySelector('.sidebar-backdrop')!,
+    resizer: root.querySelector('.sidebar-resizer')!,
     main: root.querySelector('.calendar-host')!,
   };
 }
@@ -562,6 +566,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
     setDrawer(!document.body.classList.contains('sidebar-open')),
   );
   layout.backdrop.addEventListener('click', () => setDrawer(false));
+  setupSidebarResize(layout.resizer, () => calendarView?.updateSize());
   layout.menu.setAttribute('aria-controls', 'sidebar');
 
   onSettingsSaveError((err) => showToast(`Could not save settings: ${errorMessage(err)}`, 'error'));
