@@ -757,6 +757,27 @@ code {
   opacity: 0.4;
 }
 
+/* In week/day views timed ghosts are background events (they take no column): a faded block
+   with the title, behind the real events, still clickable. */
+.calendar-host.fc .fc-bg-event.is-ghost {
+  /* Fades the calendar color (set inline) under the page color, not the title. */
+  opacity: 0.7;
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--bg) 80%, transparent),
+    color-mix(in srgb, var(--bg) 80%, transparent)
+  );
+  /* Rounded like the event blocks. */
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.calendar-host.fc .fc-bg-event.is-ghost .fc-event-title {
+  margin: 4px 6px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .event-view.is-ghost .event-view-color {
   opacity: 0.4;
 }

@@ -99,7 +99,16 @@ function dayHeaderContent(arg: DayHeaderContentArg) {
   return { domNodes: [label] };
 }
 
-function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
+/**
+ * `ghostsInBackground` (week/day views): timed ghost events are drawn as background events, so
+ * they don't take a column and push the real events aside when they overlap.
+ */
+function toEventInput(
+  event: AgendaEvent,
+  readOnly: boolean,
+  ghostsInBackground: boolean,
+): EventInput {
+  const ghost = isGhostEvent(event);
   const settings = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
   const { color, icon } = settings;
   const textColor = effectiveTextColor(settings);
@@ -114,10 +123,8 @@ function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
     textColor,
     // Events of subscribed calendars are copies of an online calendar: no drag & drop.
     editable: !readOnly,
-    classNames: [
-      ...(event.recurring ? ['is-recurring'] : []),
-      ...(isGhostEvent(event) ? ['is-ghost'] : []),
-    ],
+    classNames: [...(event.recurring ? ['is-recurring'] : []), ...(ghost ? ['is-ghost'] : [])],
+    display: ghost && ghostsInBackground && !event.allDay ? 'background' : 'auto',
     // The calendar icon is drawn by eventDidMount (see placeIcon).
     extendedProps: { agendaEvent: event, icon, textColor },
   };
@@ -321,13 +328,24 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       );
       // Offline / session expired: nothing can be dragged or resized.
       const readOnly = getCalendarState().readOnly !== null;
-      success(events.map((e) => toEventInput(e, readOnly || subscribed.has(e.calendarFileId))));
+      const ghostsInBackground = currentView.startsWith('timeGrid');
+      success(
+        events.map((e) =>
+          toEventInput(e, readOnly || subscribed.has(e.calendarFileId), ghostsInBackground),
+        ),
+      );
     },
     eventDidMount: (info) => {
       const agendaEvent = agendaEventOf(info.event);
       if (agendaEvent) info.el.title = tooltip(agendaEvent);
       const { icon, textColor } = info.event.extendedProps as { icon?: string; textColor?: string };
       placeIcon(info.el, icon, textColor);
+      // Background (ghost) events get no eventClick: open them here. Stopping mousedown keeps
+      // a click on them from starting a "new event" selection (touch selects on long press only).
+      if (info.event.display === 'background' && agendaEvent) {
+        info.el.addEventListener('mousedown', (e) => e.stopPropagation());
+        info.el.addEventListener('click', () => void openEvent(agendaEvent));
+      }
     },
     datesSet: (arg) => {
       updateHistoryButtons();
