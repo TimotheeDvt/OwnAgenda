@@ -41,16 +41,17 @@ import type { AgendaEvent } from '../types';
 import { mountCalendarView, type CalendarView } from './calendarView';
 import { chooseOption } from './choiceDialog';
 import { createEventNow, openEvent } from './eventActions';
+import { ICONS } from './icons';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
 import { mountSidebar, type Sidebar } from './sidebar';
 import { promptFolderPath, promptForm, promptText } from './textPrompt';
-import { applyTheme, cachedTheme } from './theme';
+import { applyTheme, cachedTheme, mountThemeSwitch } from './theme';
 import { showToast } from './toast';
 
 interface Layout {
   menu: HTMLButtonElement;
   saveStatus: HTMLElement;
-  theme: HTMLSelectElement;
+  theme: HTMLButtonElement;
   user: HTMLElement;
   sidebar: HTMLElement;
   backdrop: HTMLElement;
@@ -75,11 +76,7 @@ function renderLayout(root: HTMLElement): Layout {
       <h1 class="app-title">ICS Agenda</h1>
       <div class="header-actions">
         <div class="save-status" aria-live="polite"></div>
-        <select class="theme-select" aria-label="Theme">
-          <option value="system">System theme</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
+        <button class="theme-switch"></button>
         <div class="header-user"></div>
       </div>
     </header>
@@ -91,7 +88,7 @@ function renderLayout(root: HTMLElement): Layout {
   return {
     menu: root.querySelector('.menu-btn')!,
     saveStatus: root.querySelector('.save-status')!,
-    theme: root.querySelector('.theme-select')!,
+    theme: root.querySelector('.theme-switch')!,
     user: root.querySelector('.header-user')!,
     sidebar: root.querySelector('.sidebar')!,
     backdrop: root.querySelector('.sidebar-backdrop')!,
@@ -128,7 +125,11 @@ function renderUser(user: DriveUser | null): void {
     name.title = user.emailAddress;
     nodes.push(name);
   }
-  nodes.push(button('Sign out', 'btn', () => void handleSignOut()));
+  const signOutButton = button('', 'icon-btn header-icon-btn', () => void handleSignOut());
+  signOutButton.innerHTML = ICONS.logout;
+  signOutButton.setAttribute('aria-label', 'Sign out');
+  signOutButton.title = 'Sign out';
+  nodes.push(signOutButton);
   layout.user.replaceChildren(...nodes);
 }
 
@@ -155,7 +156,6 @@ function renderSaveStatus(state: CalendarState): void {
 
 function setTheme(theme: Theme): void {
   applyTheme(theme);
-  layout.theme.value = theme;
   if (isSignedIn() && getSettings().theme !== theme) updateSettings({ theme });
 }
 
@@ -417,7 +417,6 @@ async function showOfflineCopy(user: DriveUser | null): Promise<boolean> {
 function mountMain(): void {
   if (sidebar) return;
   applyTheme(getSettings().theme);
-  layout.theme.value = getSettings().theme;
   sidebar = mountSidebar(layout.sidebar, {
     onChangeFolder: () => void changeFolder(),
     onReload: () => void reloadAll(),
@@ -469,7 +468,6 @@ async function enterSignedIn(): Promise<void> {
   if (current !== session) return;
   if (settingsLoaded) {
     applyTheme(getSettings().theme);
-    layout.theme.value = getSettings().theme;
   }
   mountMain();
 
@@ -559,8 +557,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
   layout = renderLayout(root);
   const theme = cachedTheme();
   applyTheme(theme);
-  layout.theme.value = theme;
-  layout.theme.addEventListener('change', () => setTheme(layout.theme.value as Theme));
+  mountThemeSwitch(layout.theme, setTheme);
   layout.menu.addEventListener('click', () =>
     setDrawer(!document.body.classList.contains('sidebar-open')),
   );

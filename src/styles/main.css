@@ -150,10 +150,50 @@ code {
 .sidebar {
   width: var(--sidebar-width);
   flex: none;
-  overflow-y: auto;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--surface);
+}
+
+/* The sections scroll; the footer stays at the bottom of the panel. */
+.sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar-footer {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-footer .icon-btn {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+/* A proxy is configured. */
+.sidebar-footer .icon-btn.is-active::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.header-icon-btn {
+  width: 32px;
+  height: 32px;
 }
 
 .calendar-host {
@@ -421,16 +461,6 @@ code {
   min-width: 0;
 }
 
-.theme-select {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-}
-
 .save-status {
   display: flex;
   align-items: center;
@@ -634,21 +664,6 @@ code {
   .icon-btn.is-spinning {
     animation: none;
   }
-}
-
-.link-btn {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0;
-  margin-top: 10px;
-  border: none;
-  background: none;
-  color: var(--primary);
-  cursor: pointer;
-}
-
-.link-btn:hover {
-  text-decoration: underline;
 }
 
 /* Calendar list tools */
@@ -922,10 +937,6 @@ kbd {
     display: none;
   }
 
-  .theme-select {
-    max-width: 92px;
-  }
-
   .save-status {
     font-size: 0.75rem;
   }
@@ -1107,5 +1118,71 @@ kbd {
   .calendar-item .drag-handle:focus-visible,
   .calendar-list.is-reordering .drag-handle {
     opacity: 1;
+  }
+}
+
+/* Light/dark switch: a pill with a sun and a moon; the knob sits behind the active one. */
+
+.theme-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 52px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.theme-switch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  transition: transform 0.2s ease;
+}
+
+.theme-switch[data-mode='dark'] .theme-switch-knob {
+  transform: translateX(24px);
+}
+
+.theme-switch-icon {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  width: 24px;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+
+.theme-switch-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.theme-switch[data-mode='light'] .theme-switch-sun {
+  color: #f59e0b;
+}
+
+.theme-switch[data-mode='dark'] .theme-switch-moon {
+  color: var(--primary-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-switch-knob,
+  .theme-switch-icon {
+    transition: none;
   }
 }

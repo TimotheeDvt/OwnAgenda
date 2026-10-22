@@ -277,21 +277,25 @@ function renderOptions(actions: SidebarActions): HTMLElement[] {
     'Stores your calendars in this browser so the agenda opens instantly and stays readable ' +
     'when Google Drive is unreachable.';
 
+  return [el('h2', 'sidebar-title', 'Options'), offlineLabel];
+}
+
+/** Icon-only tools pinned to the bottom of the sidebar. */
+function renderFooter(actions: SidebarActions): HTMLElement[] {
+  const shortcuts = iconButton('keyboard', 'Keyboard shortcuts (?)', actions.onShowShortcuts);
+
   const proxy = getSettings().corsProxy;
-  const proxyButton = button(
-    proxy ? `CORS proxy: ${hostOf(proxy.replace('{url}', ''))}` : 'CORS proxy for subscriptions…',
-    'link-btn',
+  const proxyButton = iconButton(
+    'globe',
+    proxy
+      ? `CORS proxy for subscriptions: ${hostOf(proxy.replace('{url}', ''))}`
+      : 'CORS proxy for subscriptions (only needed when an online calendar refuses downloads)',
     actions.onSetCorsProxy,
   );
-  proxyButton.title =
-    'Only needed when an online calendar refuses downloads from a web page (CORS errors).';
+  // A dot shows that a proxy is set.
+  proxyButton.classList.toggle('is-active', Boolean(proxy));
 
-  return [
-    el('h2', 'sidebar-title', 'Options'),
-    offlineLabel,
-    proxyButton,
-    button('Keyboard shortcuts  ( ? )', 'link-btn', actions.onShowShortcuts),
-  ];
+  return [shortcuts, proxyButton];
 }
 
 export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sidebar {
@@ -299,7 +303,11 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
   const folderSection = el('section', 'sidebar-section');
   const calendarsSection = el('section', 'sidebar-section');
   const optionsSection = el('section', 'sidebar-section');
-  host.replaceChildren(searchSection, folderSection, calendarsSection, optionsSection);
+  // Sections scroll; the footer stays glued to the bottom of the panel.
+  const content = el('div', 'sidebar-content');
+  content.append(searchSection, folderSection, calendarsSection, optionsSection);
+  const footer = el('div', 'sidebar-footer');
+  host.replaceChildren(content, footer);
 
   // The search box is mounted once so typing isn't interrupted by re-renders.
   const search = mountSearch(searchSection, actions.onPickSearchResult);
@@ -309,6 +317,7 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
     folderSection.replaceChildren(...renderFolder(actions, state));
     calendarsSection.replaceChildren(...renderCalendars(actions, state));
     optionsSection.replaceChildren(...renderOptions(actions));
+    footer.replaceChildren(...renderFooter(actions));
     if (focusAfterRender) {
       calendarsSection
         .querySelector<HTMLElement>(
