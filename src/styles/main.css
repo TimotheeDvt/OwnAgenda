@@ -678,15 +678,35 @@ code {
   margin-left: auto;
 }
 
-/* Tools appear on hover/focus where hovering exists; always visible on touch screens. */
+/* Where hovering exists, the tools float over the end of the row and only show on hover/focus,
+   so they don't take space from the name the rest of the time. On touch screens they stay in
+   the row, always visible. */
 @media (hover: hover) {
-  .calendar-item .calendar-tools .icon-btn:not(.is-spinning) {
-    opacity: 0;
+  .calendar-item {
+    position: relative;
   }
 
-  .calendar-item:hover .calendar-tools .icon-btn:not(:disabled),
-  .calendar-item:focus-within .calendar-tools .icon-btn:not(:disabled) {
+  .calendar-tools {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    padding-left: 16px;
+    /* Fades the end of the name under the buttons instead of cutting it sharply. */
+    background: linear-gradient(to right, transparent, var(--surface) 14px);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .calendar-item:hover .calendar-tools,
+  .calendar-item:focus-within .calendar-tools,
+  .calendar-tools:has(.is-spinning) {
     opacity: 1;
+    pointer-events: auto;
+  }
+
+  .calendar-item.is-dragging .calendar-tools {
+    background: linear-gradient(to right, transparent, var(--surface-hover) 14px);
   }
 }
 
@@ -1090,8 +1110,9 @@ kbd {
 /* Reordering calendars */
 
 .drag-handle {
-  width: 18px;
-  margin-left: -4px;
+  width: 22px;
+  height: 28px;
+  margin-left: -6px;
   cursor: grab;
   /* Let pointer events drive the drag on touch screens instead of scrolling. */
   touch-action: none;
@@ -1185,4 +1206,9 @@ kbd {
   .theme-switch-icon {
     transition: none;
   }
+}
+
+.drag-handle svg {
+  width: 25px;
+  height: 25px;
 }

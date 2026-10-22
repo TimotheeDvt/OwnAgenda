@@ -27,9 +27,12 @@ export const ICONS = {
     '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/>' +
       '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
   ),
+  // Solid dots (fill, no stroke) so they stay visible at small sizes.
   grip: svg(
-    '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/>' +
-      '<circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+    '<g fill="currentColor" stroke="none">' +
+      '<circle cx="8.5" cy="5" r="3"/><circle cx="15.5" cy="5" r="3"/>' +
+      '<circle cx="8.5" cy="12" r="3"/><circle cx="15.5" cy="12" r="3"/>' +
+      '<circle cx="8.5" cy="19" r="3"/><circle cx="15.5" cy="19" r="3"/></g>',
   ),
   link: svg(
     '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>' +
