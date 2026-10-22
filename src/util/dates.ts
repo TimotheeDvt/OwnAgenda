@@ -18,6 +18,20 @@ export function diffDays(a: string, b: string): number {
   return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
 }
 
+/**
+ * Parses a 24-hour time typed by the user ("9", "930", "9:30", "09:30", "18.15") into "HH:mm".
+ * Returns null if it isn't a valid time.
+ */
+export function normalizeTime(value: string): string | null {
+  const v = value.trim();
+  const m = /^(\d{1,2})(?:[:.h]?(\d{2}))?$/.exec(v);
+  if (!m) return null;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2] ?? 0);
+  if (hours > 23 || minutes > 59) return null;
+  return `${pad(hours)}:${pad(minutes)}`;
+}
+
 /** Splits an instant into date ("YYYY-MM-DD") and time ("HH:mm") inputs in the given zone. */
 export function instantToWall(ms: number, timeZone: string): { date: string; time: string } {
   const a = epochToZonedArray(ms, timeZone);

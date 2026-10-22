@@ -7,7 +7,7 @@ import {
   type SimpleRule,
   type Weekday,
 } from '../ics/rrule';
-import { addDays, instantToWall, wallToInstant } from '../util/dates';
+import { addDays, instantToWall, normalizeTime, wallToInstant } from '../util/dates';
 import { chooseOption } from './choiceDialog';
 
 export interface CalendarOption {
@@ -106,17 +106,17 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         <label class="field">Calendar
           <select name="calendar"></select>
         </label>
-        <label class="checkbox"><input name="allDay" type="checkbox" /> All day</label>
+        <label class="checkbox"><input name="allDay" type="checkbox" /> Full day</label>
         <div class="field">Start
           <div class="datetime-row">
             <input name="startDate" type="date" aria-label="Start date" required />
-            <input name="startTime" class="time-input" type="time" aria-label="Start time" />
+            <input name="startTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="Start time (24-hour, HH:MM)" />
           </div>
         </div>
         <div class="field">End
           <div class="datetime-row">
             <input name="endDate" type="date" aria-label="End date" required />
-            <input name="endTime" class="time-input" type="time" aria-label="End time" />
+            <input name="endTime" class="time-input" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" autocomplete="off" aria-label="End time (24-hour, HH:MM)" />
           </div>
         </div>
         <label class="field">Repeat
@@ -262,6 +262,13 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       }
       previousStart = { date: startDate.value, time: startTime.value };
     };
+    // Time fields are 24-hour text inputs (native time pickers may show AM/PM): tidy "930" or
+    // "9:30" into "09:30" when leaving the field.
+    for (const input of [startTime, endTime]) {
+      input.addEventListener('change', () => {
+        input.value = normalizeTime(input.value) ?? input.value;
+      });
+    }
     startDate.addEventListener('change', shiftEnd);
     startTime.addEventListener('change', shiftEnd);
 
@@ -335,8 +342,14 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         }
         return { ...base, allDay: true, start: startDate.value, end: addDays(endDate.value, 1) };
       }
-      const start = wallToInstant(startDate.value, startTime.value, timeZone);
-      const end = wallToInstant(endDate.value, endTime.value, timeZone);
+      const startClock = normalizeTime(startTime.value);
+      const endClock = normalizeTime(endTime.value);
+      if (!startClock || !endClock) {
+        showError('Please enter start and end times as HH:MM (24-hour), e.g. 09:30 or 18:00.');
+        return null;
+      }
+      const start = wallToInstant(startDate.value, startClock, timeZone);
+      const end = wallToInstant(endDate.value, endClock, timeZone);
       if (Number.isNaN(start) || Number.isNaN(end)) {
         showError('Please enter a start and end time.');
         return null;

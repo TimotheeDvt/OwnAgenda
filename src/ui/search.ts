@@ -26,6 +26,7 @@ function formatWhen(event: AgendaEvent): string {
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
+    hour12: false,
     minute: '2-digit',
     // Floating times are wall-clock times: their Date is in the browser zone.
     timeZone: event.startInput.endsWith('Z') ? timeZone : undefined,

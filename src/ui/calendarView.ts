@@ -93,6 +93,10 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     headerToolbar: toolbar().header,
     footerToolbar: toolbar().footer,
     buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
+    allDayText: 'Full day',
+    // 24-hour clock everywhere (time axis, event times, list view).
+    slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+    eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
     height: '100%',
     nowIndicator: true,
     dayMaxEvents: true,

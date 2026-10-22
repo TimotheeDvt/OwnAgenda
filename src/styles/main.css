@@ -991,3 +991,47 @@ kbd {
     transition: none;
   }
 }
+
+/* Folder: label, path and buttons on one row. */
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-row .sidebar-title {
+  margin: 0;
+  flex: none;
+}
+
+.folder-row .folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.folder-row .sidebar-buttons {
+  margin-top: 0;
+  flex: none;
+  gap: 4px;
+}
+
+.folder-row .btn-small {
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.folder-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+.icon-btn svg,
+.folder-icon svg {
+  display: block;
+}

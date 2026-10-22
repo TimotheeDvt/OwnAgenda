@@ -6,6 +6,7 @@ import {
   updateCalendarSettings,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { ICONS, type IconName } from './icons';
 import { mountSearch } from './search';
 
 export interface SidebarActions {
@@ -42,8 +43,9 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   return btn;
 }
 
-function iconButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
-  const btn = button(icon, 'icon-btn', onClick);
+function iconButton(icon: IconName, label: string, onClick: () => void): HTMLButtonElement {
+  const btn = button('', 'icon-btn', onClick);
+  btn.innerHTML = ICONS[icon];
   btn.setAttribute('aria-label', label);
   btn.title = label;
   return btn;
@@ -53,19 +55,31 @@ function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElemen
   const path = getSettings().folderPath;
   const buttons = el('div', 'sidebar-buttons');
   buttons.appendChild(
-    button(path ? 'Change' : 'Set folder', 'btn btn-small', actions.onChangeFolder),
+    iconButton('edit', path ? 'Change folder' : 'Set folder', actions.onChangeFolder),
   );
   if (path) {
-    const reload = button('Reload all', 'btn btn-small', actions.onReload);
-    reload.disabled = state.status === 'loading';
-    reload.title = 'Download every calendar of the folder again from Google Drive';
+    const loading = state.status === 'loading';
+    const reload = iconButton(
+      'refresh',
+      'Reload all calendars of the folder from Google Drive',
+      actions.onReload,
+    );
+    reload.disabled = loading;
+    if (loading) reload.classList.add('is-spinning');
     buttons.appendChild(reload);
   }
-  return [
-    el('h2', 'sidebar-title', 'Folder'),
-    el('div', 'folder-path', path || 'Not set'),
-    buttons,
-  ];
+
+  const folderIcon = el('span', 'folder-icon');
+  folderIcon.innerHTML = ICONS.folder;
+  folderIcon.setAttribute('role', 'img');
+  folderIcon.setAttribute('aria-label', 'Folder');
+  folderIcon.title = 'Google Drive folder';
+
+  const pathLabel = el('span', 'folder-path', path || 'Not set');
+  pathLabel.title = path;
+  const row = el('div', 'folder-row');
+  row.append(folderIcon, pathLabel, buttons);
+  return [row];
 }
 
 function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLElement[] {
@@ -107,12 +121,12 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     label.append(visible, name);
 
     const refreshing = state.refreshing.includes(calendar.fileId);
-    const refresh = iconButton('↻', `Refresh ${calendar.displayName} from Google Drive`, () =>
+    const refresh = iconButton('refresh', `Refresh ${calendar.displayName} from Google Drive`, () =>
       actions.onRefreshCalendar(calendar.fileId),
     );
     refresh.disabled = refreshing || state.status === 'loading' || state.fromCache;
     if (refreshing) refresh.classList.add('is-spinning');
-    const rename = iconButton('✎', `Rename ${calendar.displayName}`, () =>
+    const rename = iconButton('edit', `Rename ${calendar.displayName}`, () =>
       actions.onRenameCalendar(calendar.fileId),
     );
 
