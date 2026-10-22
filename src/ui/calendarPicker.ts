@@ -10,6 +10,12 @@ export interface CalendarPicker {
   close(): void;
 }
 
+/** The calendar name, with its icon (if any) before it. */
+function withIcon(calendar: CalendarOption | undefined): string {
+  if (!calendar) return '';
+  return calendar.icon ? `${calendar.icon} ${calendar.displayName}` : calendar.displayName;
+}
+
 function dot(color: string): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = 'calendar-dot';
@@ -45,7 +51,7 @@ export function createCalendarPicker(
     const name = document.createElement('span');
     name.className = 'calendar-picker-name';
     name.id = `${labelId}-value`;
-    name.textContent = calendar?.displayName ?? '';
+    name.textContent = withIcon(calendar);
     const chevron = document.createElement('span');
     chevron.className = 'calendar-picker-chevron';
     chevron.setAttribute('aria-hidden', 'true');
@@ -78,7 +84,7 @@ export function createCalendarPicker(
       option.className = 'time-option calendar-option';
       option.setAttribute('role', 'option');
       const name = document.createElement('span');
-      name.textContent = calendar.displayName;
+      name.textContent = withIcon(calendar);
       option.append(dot(calendar.color), name);
       if (calendar.fileId === value) {
         option.classList.add('is-selected');

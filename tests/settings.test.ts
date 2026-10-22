@@ -3,6 +3,7 @@ import {
   defaultSettings,
   getSettings,
   moveCalendar,
+  normalizeIcon,
   normalizeSettings,
   orderCalendars,
   resetSettings,
@@ -46,7 +47,7 @@ describe('normalizeSettings', () => {
     expect(s.weekStartsOn).toBe(d.weekStartsOn);
     expect(s.timeZone).toBe(d.timeZone);
     expect(s.theme).toBe(d.theme);
-    expect(s.calendars).toEqual({ abc: { color: '', visible: true } });
+    expect(s.calendars).toEqual({ abc: { color: '', visible: true, icon: '' } });
   });
 
   it('preserves unknown fields so newer settings are not lost', () => {
@@ -87,5 +88,29 @@ describe('calendar order', () => {
       'b',
     ]);
     expect(normalizeSettings({ calendarOrder: 'nope' }).calendarOrder).toEqual([]);
+  });
+});
+
+describe('calendar icons', () => {
+  it('keeps one emoji (including joined/modified ones) and drops invalid values', () => {
+    expect(normalizeIcon(' 🎓 ')).toBe('🎓');
+    expect(normalizeIcon('👨‍👩‍👧')).toBe('👨‍👩‍👧');
+    expect(normalizeIcon('🏋️‍♀️')).toBe('🏋️‍♀️');
+    expect(normalizeIcon('📚📅')).toBe('📚');
+    expect(normalizeIcon('')).toBe('');
+    expect(normalizeIcon(42)).toBe('');
+  });
+
+  it('is read from saved settings', () => {
+    const s = normalizeSettings({ calendars: { abc: { color: '#ff0000', icon: '💼' } } });
+    expect(s.calendars.abc?.icon).toBe('💼');
+  });
+});
+
+describe('Nerd Font (Material Design) icons', () => {
+  it('keeps a single nf-md icon character', () => {
+    const calendarIcon = String.fromCodePoint(0xf00ed); // nf-md-calendar
+    expect(normalizeIcon(calendarIcon)).toBe(calendarIcon);
+    expect(normalizeIcon(` ${calendarIcon}${String.fromCodePoint(0xf00d6)}`)).toBe(calendarIcon);
   });
 });

@@ -62,7 +62,10 @@
   --header-height: 56px;
   --sidebar-width: 260px;
 
+  /* 'Agenda Icons' only covers the icon codepoints (registered with a unicode-range in
+     ui/iconFont.ts), so calendar icons render anywhere and normal text is untouched. */
   font-family:
+    'Agenda Icons',
     system-ui,
     -apple-system,
     'Segoe UI',
@@ -87,6 +90,15 @@ body,
 
 body {
   background: var(--bg);
+}
+
+/* Browsers give form controls their own font (e.g. Arial); make them use the page's font stack,
+   which includes the icon font, so calendar icons render in buttons and inputs too. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 code {
@@ -291,29 +303,26 @@ code {
   padding: 4px 0;
 }
 
+/* Calendar color square (background set inline) with its icon inside; opens the picker. */
 .calendar-color {
   width: 22px;
   height: 22px;
+  /* Icons (font glyphs or emoji) centred in the square. */
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 4px;
-  background: none;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   flex: none;
 }
 
-.calendar-color::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.calendar-color::-webkit-color-swatch {
-  border: none;
-  border-radius: 4px;
-}
-
-.calendar-color::-moz-color-swatch {
-  border: none;
-  border-radius: 4px;
+.calendar-color:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .calendar-label {
@@ -1558,4 +1567,177 @@ body.is-resizing-sidebar {
   font-weight: 500;
   white-space: nowrap;
   cursor: help;
+}
+
+/* Color & icon picker (opened from a calendar's color square). */
+
+.style-picker {
+  position: fixed;
+  z-index: 60;
+  width: 264px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.style-picker-heading {
+  margin: 2px 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.style-picker-heading:not(:first-child) {
+  margin-top: 12px;
+}
+
+.style-swatches {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.style-swatch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.style-swatch.is-selected {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.style-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* "Custom color": the browser's color picker, shown as a color square like before. */
+.style-custom-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.style-custom-color:hover {
+  background: var(--surface-hover);
+}
+
+.style-custom-color.is-selected {
+  font-weight: 600;
+}
+
+.calendar-color-input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  flex: none;
+}
+
+.calendar-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.calendar-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+.calendar-color-input::-moz-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+.style-custom-color.is-selected .calendar-color-input {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.style-icons {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.style-icon {
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.style-icon:hover,
+.style-icon:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.style-icon.is-selected {
+  background: var(--today);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.style-icon-input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* Calendar icon on events: in the top-right corner of event blocks, on the line of the hours
+   (inline before the name in list view and month-view dots). */
+
+.calendar-host.fc .fc-daygrid-block-event.has-icon {
+  position: relative;
+}
+
+.calendar-host.fc .event-icon {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* Keep the hours and the name clear of the icon. */
+.calendar-host.fc .has-icon .fc-event-main,
+.calendar-host.fc .has-icon .fc-event-title-container {
+  padding-right: 1.4em;
+}
+
+.calendar-host.fc .event-icon.is-inline {
+  position: static;
+  margin-right: 4px;
 }

@@ -48,7 +48,11 @@ const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
 };
 
 function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
-  const { color } = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
+  const { color, icon } = getCalendarSettings(
+    event.calendarFileId,
+    calendarIndex(event.calendarFileId),
+  );
+  const textColor = readableTextColor(color);
   return {
     id: event.id,
     title: event.title || '(No title)',
@@ -57,12 +61,39 @@ function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
     allDay: event.allDay,
     color,
     // Dark or white text, whichever reads best on the event's background.
-    textColor: readableTextColor(color),
+    textColor,
     // Events of subscribed calendars are copies of an online calendar: no drag & drop.
     editable: !readOnly,
     classNames: event.recurring ? ['is-recurring'] : [],
-    extendedProps: { agendaEvent: event },
+    // The calendar icon is drawn by eventDidMount (see placeIcon).
+    extendedProps: { agendaEvent: event, icon, textColor },
   };
+}
+
+/**
+ * Adds the calendar's icon to a rendered event: in the top-right corner of event blocks (on the
+ * line of the hours), or before the name where there is no such line (list view, month-view dots).
+ */
+function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string): void {
+  if (!icon) return;
+  const badge = document.createElement('span');
+  badge.className = 'event-icon';
+  badge.setAttribute('aria-hidden', 'true');
+  badge.textContent = icon;
+  // In list view and month dots the name sits on the page background: keep the page color.
+  const inline =
+    el.querySelector('.fc-list-event-title') ??
+    (el.classList.contains('fc-daygrid-dot-event') ? el.querySelector('.fc-event-title') : null);
+  if (inline) {
+    badge.classList.add('is-inline');
+    inline.prepend(badge);
+  } else {
+    // On the event block: same color as the event's text (dark or white for contrast). The
+    // badge sits outside the part FullCalendar colors, so it is set explicitly.
+    if (textColor) badge.style.color = textColor;
+    el.classList.add('has-icon');
+    el.appendChild(badge);
+  }
 }
 
 function tooltip(event: AgendaEvent): string {
@@ -155,6 +186,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     eventDidMount: (info) => {
       const agendaEvent = agendaEventOf(info.event);
       if (agendaEvent) info.el.title = tooltip(agendaEvent);
+      const { icon, textColor } = info.event.extendedProps as { icon?: string; textColor?: string };
+      placeIcon(info.el, icon, textColor);
     },
     datesSet: (arg) => {
       const view = arg.view.type as ViewName;

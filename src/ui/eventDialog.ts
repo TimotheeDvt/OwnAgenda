@@ -18,6 +18,8 @@ export interface CalendarOption {
   displayName: string;
   /** Calendar color, shown as a dot before the name. */
   color: string;
+  /** Calendar icon (emoji) shown before the name, or "". */
+  icon: string;
 }
 
 export interface EventDialogOptions {

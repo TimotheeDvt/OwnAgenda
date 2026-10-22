@@ -1,6 +1,8 @@
 import './styles/main.css';
 import { startApp } from './ui/app';
+import { registerIconFont } from './ui/iconFont';
 
+registerIconFont();
 void startApp(document.getElementById('app')!);
 
 // Installable app: the service worker caches the app so it opens without network. Only in

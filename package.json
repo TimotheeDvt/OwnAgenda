@@ -20,6 +20,7 @@
     "@fullcalendar/interaction": "^6.1.22",
     "@fullcalendar/list": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
+    "@mdi/font": "^7.4.47",
     "ical.js": "^2.2.1"
   },
   "devDependencies": {

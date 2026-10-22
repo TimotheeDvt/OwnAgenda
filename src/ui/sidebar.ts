@@ -13,6 +13,8 @@ import {
   updateCalendarSettings,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { readableTextColor } from '../util/color';
+import { openCalendarStylePicker } from './calendarStylePicker';
 import { ICONS, type IconName } from './icons';
 import { mountSearch } from './search';
 
@@ -228,12 +230,22 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     visible.setAttribute('aria-pressed', String(settings.visible));
     if (!settings.visible) item.classList.add('is-hidden');
 
-    const color = el('input', 'calendar-color');
-    color.type = 'color';
-    color.value = settings.color;
-    color.setAttribute('aria-label', `Color of ${calendar.displayName}`);
-    color.addEventListener('change', () =>
-      updateCalendarSettings(calendar.fileId, index, { color: color.value }),
+    // Color square with the calendar's icon inside; opens the color & icon picker.
+    const color = el('button', 'calendar-color', settings.icon);
+    color.type = 'button';
+    color.style.background = settings.color;
+    // Font icons take the text color: dark or white, whichever reads best on the square.
+    color.style.color = readableTextColor(settings.color);
+    color.setAttribute('aria-label', `Color and icon of ${calendar.displayName}`);
+    color.title = 'Change color and icon';
+    color.addEventListener('click', () =>
+      openCalendarStylePicker({
+        anchor: color,
+        calendarName: calendar.displayName,
+        color: settings.color,
+        icon: settings.icon,
+        onChange: (patch) => updateCalendarSettings(calendar.fileId, index, patch),
+      }),
     );
 
     const subscription = subscriptionOf(calendar.fileId);

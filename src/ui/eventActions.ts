@@ -23,7 +23,8 @@ import { showToast } from './toast';
 export type EventTimes = Pick<EventDraft, 'allDay' | 'start' | 'end'>;
 
 function toOption({ fileId, displayName }: { fileId: string; displayName: string }) {
-  return { fileId, displayName, color: getCalendarSettings(fileId, calendarIndex(fileId)).color };
+  const { color, icon } = getCalendarSettings(fileId, calendarIndex(fileId));
+  return { fileId, displayName, color, icon };
 }
 
 /** Calendars events can be added to or moved to (subscribed calendars are read-only). */

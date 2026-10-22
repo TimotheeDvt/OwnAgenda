@@ -73,15 +73,16 @@ export function mountSearch(host: HTMLElement, onPick: (event: AgendaEvent) => v
         button.className = 'search-result';
         const dot = document.createElement('span');
         dot.className = 'search-dot';
-        dot.style.background = getCalendarSettings(
+        const style = getCalendarSettings(
           event.calendarFileId,
           calendarIndex(event.calendarFileId),
-        ).color;
+        );
+        dot.style.background = style.color;
         const text = document.createElement('span');
         text.className = 'search-text';
         const title = document.createElement('span');
         title.className = 'search-title';
-        title.textContent = `${event.title || '(No title)'}${event.recurring ? ' ↻' : ''}`;
+        title.textContent = `${style.icon ? `${style.icon} ` : ''}${event.title || '(No title)'}${event.recurring ? ' ↻' : ''}`;
         const meta = document.createElement('span');
         meta.className = 'search-meta';
         meta.textContent = [formatWhen(event), calendars.get(event.calendarFileId)?.displayName]

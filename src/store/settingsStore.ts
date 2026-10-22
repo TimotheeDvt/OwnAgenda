@@ -9,6 +9,24 @@ export type Theme = 'system' | 'light' | 'dark';
 export interface CalendarSettings {
   color: string;
   visible: boolean;
+  /** An emoji shown in the calendar's color square and before its events' names; "" = none. */
+  icon: string;
+}
+
+/** Longest icon accepted (emoji with modifiers/joiners take several UTF-16 units). */
+const MAX_ICON_LENGTH = 16;
+
+/** Trims an icon and keeps only its first grapheme (one emoji), or "" if empty/too long. */
+export function normalizeIcon(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const first =
+    typeof Intl.Segmenter === 'function'
+      ? ([...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)][0]
+          ?.segment ?? '')
+      : ([...trimmed][0] ?? '');
+  return first.length <= MAX_ICON_LENGTH ? first : '';
 }
 
 export interface Settings {
@@ -68,6 +86,7 @@ export function normalizeSettings(raw: unknown): Settings {
         ...value,
         color: typeof value.color === 'string' && HEX_COLOR.test(value.color) ? value.color : '',
         visible: typeof value.visible === 'boolean' ? value.visible : true,
+        icon: normalizeIcon(value.icon),
       };
     }
   }
@@ -196,6 +215,7 @@ export function getCalendarSettings(fileId: string, index: number): CalendarSett
   return {
     visible: saved?.visible ?? true,
     color: saved?.color || fallbackColor,
+    icon: saved?.icon ?? '',
   };
 }
 
