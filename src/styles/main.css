@@ -635,6 +635,8 @@ code {
 
 .event-dialog .dialog-actions {
   align-items: center;
+  /* Delete, Duplicate, Cancel, Save: may not fit on one line on phones. */
+  flex-wrap: wrap;
 }
 
 .btn-danger {

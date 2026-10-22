@@ -110,13 +110,41 @@ export function createEventNow(): Promise<void> {
   });
 }
 
-/** Opens the dialog for an existing event, then applies the edit or deletion. */
+/**
+ * Opens a "new event" dialog prefilled with a copy of an event (its current values in the dialog,
+ * repeat rule included), in the same calendar when it can be edited.
+ */
+async function duplicateEvent(calendarFileId: string, draft: EventDraft): Promise<void> {
+  const calendars = calendarOptions();
+  if (calendars.length === 0) {
+    showToast(
+      'There is no editable calendar to copy the event to. Create one in the sidebar first.',
+    );
+    return;
+  }
+  const target = calendars.find((c) => c.fileId === calendarFileId) ?? calendars[0]!;
+  const { rrule, ...fields } = draft;
+  const result = await openEventDialog({
+    mode: 'create',
+    heading: 'Duplicate event',
+    calendars,
+    calendarFileId: target.fileId,
+    draft: fields,
+    timeZone: getSettings().timeZone,
+    rule: rrule ? { rule: rrule, custom: false } : undefined,
+  });
+  if (result?.action === 'save' && run(() => addEvent(result.calendarFileId, result.draft))) {
+    showToast('Event duplicated.');
+  }
+}
+
+/** Opens the dialog for an existing event, then applies the edit, deletion or duplication. */
 export async function openEvent(event: AgendaEvent): Promise<void> {
   const subscription = subscriptionOf(event.calendarFileId);
   const readOnly = getCalendarState().readOnly;
   if (subscription || readOnly) {
     const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
-    await openEventDialog({
+    const result = await openEventDialog({
       mode: 'edit',
       calendars: calendar ? [toOption(calendar)] : [],
       calendarFileId: event.calendarFileId,
@@ -127,7 +155,10 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
         ? readOnlyMessage(readOnly)
         : `This event comes from a subscribed online calendar (${new URL(subscription!.url).host}). ` +
           "It is updated from there every day and can't be edited here.",
+      // A subscribed event can still be copied into one of your calendars (not while offline).
+      canDuplicate: !readOnly,
     });
+    if (result?.action === 'duplicate') await duplicateEvent(result.calendarFileId, result.draft);
     return;
   }
   const result = await openEventDialog({
@@ -138,8 +169,13 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
     timeZone: getSettings().timeZone,
     rule: event.recurring ? ruleOfEvent(event) : undefined,
     occurrence: event.recurring,
+    canDuplicate: true,
   });
   if (!result) return;
+  if (result.action === 'duplicate') {
+    await duplicateEvent(result.calendarFileId, result.draft);
+    return;
+  }
 
   if (result.action === 'delete') {
     let scope: EditScope = 'all';

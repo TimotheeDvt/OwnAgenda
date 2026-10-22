@@ -34,11 +34,21 @@ export interface EventDialogOptions {
   occurrence?: boolean;
   /** Show the event without editing (e.g. events of a subscribed calendar), with this note. */
   readOnlyNote?: string;
+  /** Offer a "Duplicate" button (edit mode): closes with the event's current values. */
+  canDuplicate?: boolean;
+  /** Dialog title instead of the default one ("New event", "Edit event"...). */
+  heading?: string;
 }
 
-/** `draft.rrule` is undefined when the repeat settings were not changed. */
+/**
+ * `draft.rrule` is undefined when the repeat settings were not changed. For "duplicate", the draft
+ * holds the values shown in the dialog, with the repeat rule always set (null for none).
+ */
 export type EventDialogResult =
-  { action: 'save'; calendarFileId: string; draft: EventDraft } | { action: 'delete' } | null;
+  | { action: 'save'; calendarFileId: string; draft: EventDraft }
+  | { action: 'duplicate'; calendarFileId: string; draft: EventDraft }
+  | { action: 'delete' }
+  | null;
 
 /** Duration presets shown as a three-way switch in the dialog. */
 type DayMode = 'fullDay' | 'evening' | 'custom';
@@ -185,6 +195,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
         <p class="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" data-action="delete" class="btn btn-danger" hidden>Delete</button>
+          <button type="button" data-action="duplicate" class="btn" hidden>Duplicate</button>
           <button type="button" data-action="cancel" class="btn">Cancel</button>
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
@@ -213,10 +224,11 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     const error = form.querySelector<HTMLElement>('.form-error')!;
     const deleteBtn = form.querySelector<HTMLButtonElement>('[data-action="delete"]')!;
     const cancelBtn = form.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
+    const duplicateBtn = form.querySelector<HTMLButtonElement>('[data-action="duplicate"]')!;
 
     const readOnly = options.readOnlyNote !== undefined;
     dialog.querySelector('h2')!.textContent =
-      mode === 'create' ? 'New event' : readOnly ? 'Event' : 'Edit event';
+      options.heading ?? (mode === 'create' ? 'New event' : readOnly ? 'Event' : 'Edit event');
 
     const calendar = createCalendarPicker(calendars, options.calendarFileId, `${id}-calendar`);
     form.querySelector('.calendar-picker-host')!.replaceWith(calendar.element);
@@ -367,6 +379,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     });
 
     deleteBtn.hidden = mode !== 'edit' || readOnly;
+    duplicateBtn.hidden = mode !== 'edit' || !options.canDuplicate;
     if (readOnly) {
       const note = form.querySelector<HTMLElement>('.readonly-note')!;
       note.textContent = options.readOnlyNote ?? '';
@@ -415,6 +428,8 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
           end,
         };
       }
+      // A new event (or a duplicate prefilled with a rule) gets whatever is shown.
+      if (mode === 'create') return rule;
       const unchanged = initialRule.custom
         ? false
         : rulesEqual(
@@ -483,6 +498,17 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       dialog.close();
     });
     cancelBtn.addEventListener('click', () => dialog.close());
+    duplicateBtn.addEventListener('click', () => {
+      // Read-only fields are disabled, but their values are still the event's.
+      const value = readDraft();
+      if (!value) return;
+      // Unchanged repeat settings: the copy repeats like the original (unless its rule is too
+      // complex for the editor, then the copy doesn't repeat).
+      const rrule =
+        value.rrule !== undefined ? value.rrule : initialRule.custom ? null : initialRule.rule;
+      result = { action: 'duplicate', calendarFileId: calendar.value, draft: { ...value, rrule } };
+      dialog.close();
+    });
     deleteBtn.addEventListener('click', async () => {
       // For occurrences of a series, the "which events?" question that follows is the confirmation.
       if (!options.occurrence) {

@@ -7,7 +7,8 @@ Your calendars are plain `.ics` files in a Google Drive folder. OwnAgenda signs 
 ## Features
 
 - Month, week, day and list views
-- Create, edit, move and delete events, including recurring ones (this event / this and following / all events)
+- Create, edit, move, duplicate and delete events, including recurring ones (this event / this and following / all events)
+- Undo and redo changes
 - Create new calendars, and give each one its own color and icon
 - Subscribe to online calendars by their `.ics` link. A read-only copy is saved in your folder and refreshed daily. An optional CORS proxy handles servers that block browser requests
 - Time zone support
