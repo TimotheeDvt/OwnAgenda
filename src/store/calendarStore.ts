@@ -9,7 +9,7 @@ import {
   updateEvent,
   type EventDraft,
 } from '../ics/edit';
-import { toCalendarFile } from '../ics/parse';
+import { calendarDisplayName, parseIcs, toCalendarFile } from '../ics/parse';
 import { expandCalendar } from '../ics/recurrence';
 import {
   deleteFollowing,
@@ -103,6 +103,19 @@ let conflictHandler: (calendar: CalendarFile) => Promise<ConflictChoice> = async
 let saveErrorHandler: (calendar: CalendarFile, message: string) => void = () => {};
 let subscriptionErrorHandler: (calendar: CalendarFile, message: string) => void = () => {};
 
+/** One change that can be undone: the .ics text of each changed calendar, before and after. */
+interface HistoryEntry {
+  label: string;
+  before: Map<string, string>;
+  after: Map<string, string>;
+}
+
+/** Changes are this many steps deep at most (each keeps whole copies of the changed files). */
+const MAX_HISTORY = 30;
+const undoStack: HistoryEntry[] = [];
+const redoStack: HistoryEntry[] = [];
+const historyListeners = new Set<() => void>();
+
 function setState(patch: Partial<CalendarState>): void {
   state = { ...state, ...patch };
   listeners.forEach((l) => l(state));
@@ -125,6 +138,7 @@ function resetSaveTracking(): void {
   pendingResaves.clear();
   saveErrors.clear();
   savedOnce = false;
+  clearHistory();
 }
 
 const byName = (a: CalendarFile, b: CalendarFile) => a.name.localeCompare(b.name);
@@ -208,6 +222,7 @@ export async function reloadCalendar(fileId: string): Promise<void> {
   editVersions.delete(fileId);
   saveErrors.delete(fileId);
   pendingResaves.delete(fileId);
+  forgetHistoryOf(fileId);
   setState({ calendars: state.calendars.map((c) => (c.fileId === fileId ? fresh : c)) });
   updateSaveStatus();
 }
@@ -345,15 +360,98 @@ function requireEditable(fileId: string): CalendarFile {
   return calendar;
 }
 
-/** Applies an edit to one or more calendars, refreshes the view, then saves them. */
-function mutate(calendars: CalendarFile[], apply: () => void): void {
+const snapshot = (calendars: CalendarFile[]) =>
+  new Map(calendars.map((c) => [c.fileId, serializeCalendar(c.vcalendar)]));
+
+/**
+ * Applies an edit to one or more calendars, refreshes the view, then saves them. The edit is
+ * recorded under `label` so it can be undone.
+ */
+function mutate(calendars: CalendarFile[], label: string, apply: () => void): void {
+  const before = snapshot(calendars);
   apply();
+  undoStack.push({ label, before, after: snapshot(calendars) });
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack.length = 0;
+  markEdited(calendars);
+  historyListeners.forEach((l) => l());
+}
+
+function markEdited(calendars: CalendarFile[]): void {
   for (const calendar of calendars) {
     calendar.dirty = true;
     editVersions.set(calendar.fileId, (editVersions.get(calendar.fileId) ?? 0) + 1);
   }
   setState({ calendars: [...state.calendars] });
   for (const calendar of calendars) void requestSave(calendar.fileId);
+}
+
+// Undo / redo
+
+export interface HistoryState {
+  /** What undo / redo would revert or apply again ("Delete event"), or null if nothing. */
+  undo: string | null;
+  redo: string | null;
+}
+
+export function getHistory(): HistoryState {
+  return { undo: undoStack.at(-1)?.label ?? null, redo: redoStack.at(-1)?.label ?? null };
+}
+
+export function onHistoryChange(listener: () => void): () => void {
+  historyListeners.add(listener);
+  return () => historyListeners.delete(listener);
+}
+
+function clearHistory(): void {
+  undoStack.length = 0;
+  redoStack.length = 0;
+  historyListeners.forEach((l) => l());
+}
+
+/** A calendar reloaded or replaced from elsewhere: its older versions must not come back. */
+function forgetHistoryOf(fileId: string): void {
+  const keep = (entry: HistoryEntry) => !entry.before.has(fileId);
+  const kept = [undoStack.filter(keep), redoStack.filter(keep)] as const;
+  if (kept[0].length === undoStack.length && kept[1].length === redoStack.length) return;
+  undoStack.splice(0, undoStack.length, ...kept[0]);
+  redoStack.splice(0, redoStack.length, ...kept[1]);
+  historyListeners.forEach((l) => l());
+}
+
+/** Puts the calendars back as they were in `versions` (file ID → .ics text). */
+function restore(versions: Map<string, string>): void {
+  // All calendars are checked first, so a change spanning two files is never half-restored.
+  const calendars = [...versions.keys()].map(requireCalendar);
+  for (const calendar of calendars) {
+    calendar.vcalendar = parseIcs(versions.get(calendar.fileId)!);
+    calendar.displayName = calendarDisplayName(calendar.vcalendar, calendar.name);
+  }
+  markEdited(calendars);
+}
+
+function step(from: HistoryEntry[], to: HistoryEntry[], side: 'before' | 'after'): string | null {
+  assertWritable();
+  // Taken off even if restoring fails (a calendar was removed): it can't be applied anyway.
+  const entry = from.pop();
+  if (!entry) return null;
+  try {
+    restore(entry[side]);
+    to.push(entry);
+  } finally {
+    historyListeners.forEach((l) => l());
+  }
+  return entry.label;
+}
+
+/** Reverts the last change. Returns what was undone, or null if there was nothing to undo. */
+export function undo(): string | null {
+  return step(undoStack, redoStack, 'before');
+}
+
+/** Applies the last undone change again. Returns what was redone, or null if nothing. */
+export function redo(): string | null {
+  return step(redoStack, undoStack, 'after');
 }
 
 /** An event's current times and fields, in EventDraft format (as edited in the dialog). */
@@ -383,7 +481,7 @@ export function ruleOfEvent(event: AgendaEvent): { rule: SimpleRule | null; cust
 
 export function addEvent(fileId: string, draft: EventDraft): void {
   const calendar = requireEditable(fileId);
-  mutate([calendar], () => {
+  mutate([calendar], 'New event', () => {
     createEvent(calendar.vcalendar, draft, getSettings().timeZone);
   });
 }
@@ -403,9 +501,12 @@ export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOp
 
   // A plain, non-recurring event.
   if (!event.recurrenceId) {
-    if (!moving) mutate([source], () => updateEvent(source.vcalendar, event.uid, draft, timeZone));
+    if (!moving)
+      mutate([source], 'Edit event', () =>
+        updateEvent(source.vcalendar, event.uid, draft, timeZone),
+      );
     else {
-      mutate([source, target], () =>
+      mutate([source, target], 'Move event', () =>
         moveEvent(source.vcalendar, target.vcalendar, event.uid, draft, timeZone),
       );
     }
@@ -416,7 +517,7 @@ export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOp
   // An override whose series isn't in the file: edit it on its own.
   if (!event.recurring) {
     if (moving) throw new Error('This event can only be edited in its own calendar.');
-    mutate([source], () =>
+    mutate([source], 'Edit event', () =>
       editOccurrence(source.vcalendar, ref, { ...draft, rrule: undefined }, timeZone),
     );
     return;
@@ -425,13 +526,13 @@ export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOp
   const scope = options.scope ?? 'all';
   if (moving) {
     if (scope !== 'all') throw new Error('Only the whole series can move to another calendar.');
-    mutate([source, target], () => {
+    mutate([source, target], 'Move event', () => {
       moveComponents(source.vcalendar, target.vcalendar, event.uid);
       editSeries(target.vcalendar, ref, draft, timeZone);
     });
     return;
   }
-  mutate([source], () => {
+  mutate([source], 'Edit event', () => {
     if (scope === 'this') {
       editOccurrence(source.vcalendar, ref, { ...draft, rrule: undefined }, timeZone);
     } else if (scope === 'following') {
@@ -444,7 +545,7 @@ export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOp
 
 export function deleteEvent(event: AgendaEvent, scope: EditScope = 'all'): void {
   const calendar = requireEditable(event.calendarFileId);
-  mutate([calendar], () => {
+  mutate([calendar], 'Delete event', () => {
     if (!event.recurrenceId) removeEvent(calendar.vcalendar, event.uid);
     else if (!event.recurring || scope === 'this') {
       deleteOccurrence(calendar.vcalendar, occurrenceRef(event));
@@ -489,7 +590,7 @@ export function renameCalendar(fileId: string, name: string): void {
   if (!trimmed) throw new Error('Please enter a name.');
   assertWritable();
   const calendar = requireCalendar(fileId);
-  mutate([calendar], () => {
+  mutate([calendar], 'Rename calendar', () => {
     renameCalendarComponent(calendar.vcalendar, trimmed);
     calendar.displayName = trimmed;
   });
@@ -560,6 +661,7 @@ export async function syncSubscription(
       dirty: true,
     };
     editVersions.set(fileId, (editVersions.get(fileId) ?? 0) + 1);
+    forgetHistoryOf(fileId);
     setState({ calendars: state.calendars.map((c) => (c.fileId === fileId ? updated : c)) });
     await requestSave(fileId);
     return 'updated';

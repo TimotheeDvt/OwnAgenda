@@ -52,7 +52,7 @@ import {
 import type { AgendaEvent } from '../types';
 import { mountCalendarView, type CalendarView } from './calendarView';
 import { chooseOption } from './choiceDialog';
-import { createEventNow, openEvent } from './eventActions';
+import { createEventNow, openEvent, redoLastChange, undoLastChange } from './eventActions';
 import { ICONS, statusIcon } from './icons';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
 import { mountSidebar, type Sidebar } from './sidebar';
@@ -379,7 +379,12 @@ async function subscribe(): Promise<void> {
       'Its events are read-only.',
     fields: [
       { name: 'name', label: 'Name', placeholder: 'AMU lessons' },
-      { name: 'url', label: 'Calendar link', type: 'url', placeholder: 'https://... or webcal://...' },
+      {
+        name: 'url',
+        label: 'Calendar link',
+        type: 'url',
+        placeholder: 'https://... or webcal://...',
+      },
     ],
     submitLabel: 'Subscribe',
   });
@@ -739,6 +744,8 @@ function setupShortcuts(): void {
       sidebar.focusSearch();
     },
     reloadAll: () => void reloadAll(),
+    undo: undoLastChange,
+    redo: redoLastChange,
   });
 }
 

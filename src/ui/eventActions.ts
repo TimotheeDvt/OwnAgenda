@@ -9,8 +9,10 @@ import {
   eventToDraft,
   getCalendarState,
   readOnlyMessage,
+  redo,
   ruleOfEvent,
   subscriptionOf,
+  undo,
 } from '../store/calendarStore';
 import { getCalendarSettings, getSettings, orderCalendars } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
@@ -168,4 +170,20 @@ export async function changeEventTimes(event: AgendaEvent, times: EventTimes): P
   const scope = await chooseScope('edit', { this: true, following: true });
   if (!scope) return false;
   return run(() => editEvent(event, draft, { scope }));
+}
+
+/** Undo button / Ctrl+Z: reverts the last change and says which. */
+export function undoLastChange(): void {
+  run(() => {
+    const label = undo();
+    if (label) showToast(`Undone: ${label}`);
+  });
+}
+
+/** Redo button / Ctrl+Y: applies the last undone change again. */
+export function redoLastChange(): void {
+  run(() => {
+    const label = redo();
+    if (label) showToast(`Redone: ${label}`);
+  });
 }

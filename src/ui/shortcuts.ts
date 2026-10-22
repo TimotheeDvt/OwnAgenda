@@ -8,6 +8,8 @@ export interface ShortcutActions {
   newEvent(): void;
   focusSearch(): void;
   reloadAll(): void;
+  undo(): void;
+  redo(): void;
 }
 
 export const SHORTCUTS: [keys: string, description: string][] = [
@@ -20,6 +22,8 @@ export const SHORTCUTS: [keys: string, description: string][] = [
   ['L', 'List view'],
   ['C', 'New event'],
   ['/', 'Search events'],
+  ['Ctrl + Z', 'Undo the last change'],
+  ['Ctrl + Y / Ctrl + Shift + Z', 'Redo'],
   ['Shift + R', 'Reload all calendars from Drive'],
   ['?', 'Show this help'],
   ['Esc', 'Close a dialog'],
@@ -71,8 +75,24 @@ export function showShortcutsHelp(): void {
 /** Installs global keyboard shortcuts. Returns a function that removes them. */
 export function installShortcuts(actions: ShortcutActions): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    if (e.altKey || e.defaultPrevented) return;
+    // In a text field, Ctrl+Z undoes the typing instead.
     if (isTyping(e.target) || document.querySelector('dialog[open]')) return;
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase();
+      const action =
+        key === 'z'
+          ? e.shiftKey
+            ? actions.redo
+            : actions.undo
+          : key === 'y'
+            ? actions.redo
+            : null;
+      if (!action) return;
+      e.preventDefault();
+      action();
+      return;
+    }
 
     const handlers: Record<string, () => void> = {
       t: actions.today,

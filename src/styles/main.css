@@ -1919,3 +1919,38 @@ body.is-resizing-sidebar {
     font-size: 0.7rem;
   }
 }
+
+/* Undo / redo buttons (arrow icons) in the calendar toolbar. */
+.calendar-host.fc .fc-undo-button,
+.calendar-host.fc .fc-redo-button {
+  position: relative;
+  width: 2.4em;
+  min-height: 2.1em;
+}
+
+.calendar-host.fc .fc-undo-button::before,
+.calendar-host.fc .fc-redo-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: var(--arrow-icon) center / contain no-repeat;
+  mask: var(--arrow-icon) center / contain no-repeat;
+}
+
+.calendar-host.fc .fc-undo-button {
+  --arrow-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E");
+}
+
+.calendar-host.fc .fc-redo-button {
+  --arrow-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 14 5-5-5-5'/%3E%3Cpath d='M20 9H9.5a5.5 5.5 0 0 0 0 11H13'/%3E%3C/svg%3E");
+}
+
+.calendar-host.fc .fc-undo-button:disabled,
+.calendar-host.fc .fc-redo-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

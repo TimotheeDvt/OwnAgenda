@@ -255,3 +255,56 @@ describe('read-only mode (offline / session expired)', () => {
     expect(store.getCalendarState().readOnly).toBeNull();
   });
 });
+
+describe('undo / redo', () => {
+  it('undoes and redoes an edit, saving each step', async () => {
+    store.editEvent(eventByUid('single-1@test'), { ...draft, title: 'Renamed' });
+    expect(store.getHistory()).toEqual({ undo: 'Edit event', redo: null });
+
+    expect(store.undo()).toBe('Edit event');
+    expect(eventByUid('single-1@test').title).toBe('Project kickoff');
+    expect(store.getHistory()).toEqual({ undo: null, redo: 'Edit event' });
+    await settle();
+    expect(fake.uploads.at(-1)).toContain('SUMMARY:Project kickoff');
+
+    expect(store.redo()).toBe('Edit event');
+    expect(eventByUid('single-1@test').title).toBe('Renamed');
+    await settle();
+    expect(fake.uploads.at(-1)).toContain('SUMMARY:Renamed');
+  });
+
+  it('brings back a deleted event, and a new change clears what could be redone', () => {
+    store.deleteEvent(eventByUid('single-1@test'));
+    expect(allEvents()).toHaveLength(0);
+    store.undo();
+    expect(allEvents()).toHaveLength(1);
+
+    store.addEvent('cal-1', draft);
+    expect(store.getHistory()).toEqual({ undo: 'New event', redo: null });
+    expect(store.undo()).toBe('New event');
+    expect(store.undo()).toBeNull();
+  });
+
+  it('undoes a calendar rename', () => {
+    const name = () => store.getCalendarState().calendars[0]!.displayName;
+    const original = name();
+    store.renameCalendar('cal-1', 'Office');
+    store.undo();
+    expect(name()).toBe(original);
+  });
+
+  it('forgets the history of a calendar reloaded from Drive', async () => {
+    store.addEvent('cal-1', draft);
+    await settle();
+    await store.reloadCalendar('cal-1');
+    expect(store.getHistory()).toEqual({ undo: null, redo: null });
+  });
+
+  it('refuses to undo while read-only', () => {
+    store.addEvent('cal-1', draft);
+    store.setReadOnly('offline');
+    expect(() => store.undo()).toThrow(/offline/);
+    expect(allEvents()).toHaveLength(2);
+    store.setReadOnly(null);
+  });
+});

@@ -7,7 +7,9 @@ import {
   calendarIndex,
   eventsInRange,
   getCalendarState,
+  getHistory,
   onCalendarsChange,
+  onHistoryChange,
   subscriptionOf,
 } from '../store/calendarStore';
 import {
@@ -20,7 +22,14 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { changeEventTimes, createEventAt, openEvent, type EventTimes } from './eventActions';
+import {
+  changeEventTimes,
+  createEventAt,
+  openEvent,
+  redoLastChange,
+  undoLastChange,
+  type EventTimes,
+} from './eventActions';
 import { captureToClipboard } from './captureView';
 import { ICONS } from './icons';
 import intlTimeZonePlugin from './timeZonePlugin';
@@ -42,12 +51,17 @@ export const NARROW_QUERY = '(max-width: 720px)';
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   // 'capture' (camera, only shown in list view, see CSS) sits just left of the view buttons.
-  header: { left: 'prev,next today', center: 'title', right: `capture ${VIEW_NAMES.join(',')}` },
+  header: {
+    left: 'prev,next today undo,redo',
+    center: 'title',
+    right: `capture ${VIEW_NAMES.join(',')}`,
+  },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: { left: 'prev,next', center: 'title', right: 'today' },
-  footer: { center: `capture ${VIEW_NAMES.join(',')}` },
+  // Undo/redo at the bottom, within reach of the thumb.
+  footer: { center: `undo,redo capture ${VIEW_NAMES.join(',')}` },
 };
 
 // 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
@@ -222,6 +236,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         hint: 'Copy the calendar view as an image',
         click: () => captureView(),
       },
+      // Arrow icons (CSS); disabled when there is nothing to undo/redo (see updateHistoryButtons).
+      undo: { text: '', hint: 'Undo', click: () => undoLastChange() },
+      redo: { text: '', hint: 'Redo', click: () => redoLastChange() },
     },
     allDayText: 'Full day',
     // 24-hour clock everywhere (time axis, event times, list view).
@@ -290,6 +307,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
     datesSet: (arg) => {
       placeCaptureCorner();
+      updateHistoryButtons();
       const view = arg.view.type as ViewName;
       // Same dates in another view reuse the loaded events; reload so the list view can leave
       // out past events (and other views show them again).
@@ -304,6 +322,25 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   });
   calendar.render();
   placeCaptureCorner();
+
+  /** Enables undo/redo only when there is something to undo/redo and changes can be saved. */
+  function updateHistoryButtons(): void {
+    const history = getHistory();
+    const readOnly = getCalendarState().readOnly !== null;
+    for (const [name, label] of [
+      ['undo', history.undo],
+      ['redo', history.redo],
+    ] as const) {
+      const hint = name === 'undo' ? 'Undo' : 'Redo';
+      for (const button of host.querySelectorAll<HTMLButtonElement>(`.fc-${name}-button`)) {
+        button.disabled = !label || readOnly;
+        button.title = label ? `${hint}: ${label}` : hint;
+        button.setAttribute('aria-label', button.title);
+      }
+    }
+  }
+  updateHistoryButtons();
+  const offHistory = onHistoryChange(updateHistoryButtons);
 
   // In list view, drop events from the list as they end while the app stays open.
   const offSwipes = listenForSwipes(
@@ -321,6 +358,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     calendar.setOption('headerToolbar', toolbar().header);
     calendar.setOption('footerToolbar', toolbar().footer);
     calendar.setOption('slotLabelFormat', slotLabelFormat());
+    // The toolbars were rebuilt.
+    updateHistoryButtons();
   };
   narrow.addEventListener('change', onResize);
 
@@ -344,7 +383,10 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     // Save-status updates don't change events; only refetch when calendar data or the
     // read-only mode changed.
     if (state.calendars === lastCalendars && state.readOnly === lastReadOnly) return;
-    if (state.readOnly !== lastReadOnly) applyReadOnly(state.readOnly !== null);
+    if (state.readOnly !== lastReadOnly) {
+      applyReadOnly(state.readOnly !== null);
+      updateHistoryButtons();
+    }
     lastCalendars = state.calendars;
     lastReadOnly = state.readOnly;
     calendar.refetchEvents();
@@ -360,6 +402,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     destroy() {
       clearInterval(listRefresh);
       offSwipes();
+      offHistory();
       narrow.removeEventListener('change', onResize);
       offSettings();
       offCalendars();
