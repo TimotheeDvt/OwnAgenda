@@ -1111,13 +1111,6 @@ kbd {
   height: 13px;
 }
 
-.calendar-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
 .prompt-field + .prompt-field {
   margin-top: 12px;
 }
@@ -1528,4 +1521,22 @@ body.is-resizing-sidebar {
   .sidebar-resizer {
     display: none;
   }
+}
+
+/* "+ New calendar" / "+ Subscribe": fixed above the footer icons, sharing the full width. */
+.sidebar-add {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-add .btn {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

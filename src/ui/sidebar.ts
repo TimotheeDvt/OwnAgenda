@@ -273,25 +273,20 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
   });
   nodes.push(list);
 
-  if (state.folderId) {
-    const add = el('div', 'calendar-add');
-    add.append(
-      button('+ New calendar', 'btn btn-small', actions.onNewCalendar),
-      button('+ Subscribe', 'btn btn-small', actions.onSubscribe),
-    );
-    add.lastElementChild!.setAttribute(
-      'title',
-      'Add an online calendar (e.g. your university timetable) from its .ics link',
-    );
-    nodes.push(add);
-  }
-
   if (state.warnings.length) {
     const warnings = el('ul', 'sidebar-warnings');
     for (const warning of state.warnings) warnings.appendChild(el('li', undefined, warning));
     nodes.push(warnings);
   }
   return nodes;
+}
+
+/** Buttons to add a calendar, once a Drive folder is loaded (they create files in it). */
+function renderAddButtons(actions: SidebarActions, state: CalendarState): HTMLElement[] {
+  if (!state.folderId) return [];
+  const subscribe = button('+ Subscribe', 'btn btn-small', actions.onSubscribe);
+  subscribe.title = 'Add an online calendar (e.g. your university timetable) from its .ics link';
+  return [button('+ New calendar', 'btn btn-small', actions.onNewCalendar), subscribe];
 }
 
 /** Icon-only tools pinned to the bottom of the sidebar, sharing its full width. */
@@ -333,8 +328,10 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
   // Sections scroll; the footer stays glued to the bottom of the panel.
   const content = el('div', 'sidebar-content');
   content.append(searchSection, folderSection, calendarsSection);
+  // "New calendar" / "Subscribe", fixed just above the footer icons.
+  const addBar = el('div', 'sidebar-add');
   const footer = el('div', 'sidebar-footer');
-  host.replaceChildren(content, footer);
+  host.replaceChildren(content, addBar, footer);
 
   // The search box is mounted once so typing isn't interrupted by re-renders.
   const search = mountSearch(searchSection, actions.onPickSearchResult);
@@ -343,6 +340,8 @@ export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sideba
     const state = getCalendarState();
     folderSection.replaceChildren(...renderFolder(actions, state));
     calendarsSection.replaceChildren(...renderCalendars(actions, state));
+    addBar.replaceChildren(...renderAddButtons(actions, state));
+    addBar.hidden = addBar.childElementCount === 0;
     footer.replaceChildren(...renderFooter(actions));
     if (focusAfterRender) {
       calendarsSection
