@@ -18,6 +18,15 @@ export function diffDays(a: string, b: string): number {
   return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
 }
 
+/** ISO 8601 week number of a "YYYY-MM-DD" date (weeks start on Monday; week 1 holds Jan 4th). */
+export function isoWeek(date: string): number {
+  const d = new Date(`${date}T00:00:00Z`);
+  // The Thursday of the same week decides the year the week belongs to.
+  d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.floor((d.getTime() - yearStart) / 86_400_000 / 7) + 1;
+}
+
 /**
  * Parses a 24-hour time typed by the user ("9", "930", "9:30", "09:30", "18.15") into "HH:mm".
  * Returns null if it isn't a valid time.

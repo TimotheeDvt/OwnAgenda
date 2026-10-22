@@ -29,6 +29,7 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { isoWeek } from '../util/dates';
 import {
   changeEventTimes,
   createEventAt,
@@ -92,6 +93,8 @@ const NARROW_SLOT_LABEL = { hour: '2-digit', hour12: false } as const;
  * month view. Both weekday names are rendered; CSS shows the long one only where it fits.
  */
 function dayHeaderContent(arg: DayHeaderContentArg) {
+  // List view: FullCalendar's own day rows (full date); week numbers added by syncListWeekNumbers.
+  if (arg.view.type.startsWith('list')) return true;
   // Formatted by the calendar so the date is read in its time zone, not the browser's.
   const format = (options: Intl.DateTimeFormatOptions) =>
     arg.view.calendar.formatDate(arg.date, options);
@@ -167,6 +170,15 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
     el.classList.add('has-icon');
     el.appendChild(badge);
   }
+}
+
+/** "43": the same small pill in every view (see .week-number). */
+function weekNumberBadge(week: number): HTMLSpanElement {
+  const badge = document.createElement('span');
+  badge.className = 'week-number';
+  badge.textContent = String(week);
+  badge.title = `Week ${week}`;
+  return badge;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -321,6 +333,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     // No label next to the all-day row.
     allDayText: '',
     dayHeaderContent,
+    // Week numbers (ISO, "43"): on each row in month view, in the top-left corner in week/day
+    // views. List view has none built in: see syncListWeekNumbers.
+    weekNumbers: true,
+    weekNumberCalculation: 'ISO',
+    weekNumberContent: ({ num }) => ({ domNodes: [weekNumberBadge(num)] }),
+    eventsSet: () => requestAnimationFrame(syncListWeekNumbers),
     // 24-hour clock everywhere (time axis, event times, list view).
     slotLabelFormat: slotLabelFormat(),
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -397,6 +415,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       }
     },
     datesSet: (arg) => {
+      requestAnimationFrame(syncListWeekNumbers);
       updateHistoryButtons();
       syncViewMenuButton();
       const view = arg.view.type as ViewName;
@@ -414,6 +433,23 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
   });
   calendar.render();
+
+  /** List view: "43" at the left of the first row of each week (rows are only days with events). */
+  function syncListWeekNumbers(): void {
+    host.querySelectorAll('.list-week-number').forEach((el) => el.remove());
+    if (!calendar.view.type.startsWith('list')) return;
+    let lastWeek = -1;
+    for (const row of host.querySelectorAll<HTMLElement>('.fc-list-day')) {
+      const date = row.dataset.date;
+      if (!date) continue;
+      const week = isoWeek(date);
+      if (week === lastWeek) continue;
+      lastWeek = week;
+      const badge = weekNumberBadge(week);
+      badge.classList.add('list-week-number');
+      row.querySelector('.fc-list-day-cushion')?.prepend(badge);
+    }
+  }
 
   /** The phone view menu button shows the current view's name (and ▾). */
   function syncViewMenuButton(): void {

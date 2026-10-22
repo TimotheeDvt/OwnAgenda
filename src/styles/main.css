@@ -1577,6 +1577,33 @@ kbd {
   box-shadow: var(--shadow);
 }
 
+/* Week numbers ("43", weekNumberBadge in calendarView.ts): the same pill in every view. */
+.calendar-host.fc .week-number {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 0.8em;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+/* FullCalendar's own box around them (month view) is dropped: only the pill shows. */
+.calendar-host.fc .fc-daygrid-week-number {
+  top: 3px;
+  left: 3px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+}
+
+/* List view: before the day name (floated left by FullCalendar, like the date on the right). */
+.calendar-host.fc .list-week-number {
+  float: left;
+  margin-right: 8px;
+}
+
 /* Phone view switcher (viewMenu.ts), opened from the bottom toolbar. */
 .view-menu {
   position: fixed;

@@ -3,11 +3,21 @@ import {
   addDays,
   eventInputToIso,
   instantToWall,
+  isoWeek,
   normalizeTime,
   wallToInstant,
 } from '../src/util/dates';
 
 describe('date helpers', () => {
+  it('computes ISO week numbers, including around the new year', () => {
+    expect(isoWeek('2026-10-19')).toBe(43);
+    expect(isoWeek('2026-10-25')).toBe(43);
+    expect(isoWeek('2026-10-26')).toBe(44);
+    expect(isoWeek('2021-01-03')).toBe(53);
+    expect(isoWeek('2024-12-30')).toBe(1);
+    expect(isoWeek('2026-12-31')).toBe(53);
+  });
+
   it('adds days across month and year boundaries', () => {
     expect(addDays('2025-01-31', 1)).toBe('2025-02-01');
     expect(addDays('2025-01-01', -1)).toBe('2024-12-31');
