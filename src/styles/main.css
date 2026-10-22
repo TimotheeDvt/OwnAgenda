@@ -1852,3 +1852,70 @@ body.is-resizing-sidebar {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* Phone week & month views: columns are ~50px wide, so the event name gets all the room. The
+   hours are left out (the position gives them in week view, the dialog shows them), and so is
+   the calendar icon on event blocks, and in month view on every event (the color already tells
+   the calendar). Day view keeps both. */
+@media (max-width: 720px) {
+  .calendar-host.fc .fc-timeGridWeek-view .fc-event,
+  .calendar-host.fc .fc-dayGridMonth-view .fc-event {
+    font-size: 0.7rem;
+    line-height: 1.2;
+  }
+
+  .calendar-host.fc .fc-timeGridWeek-view .fc-event-time,
+  .calendar-host.fc .fc-dayGridMonth-view .fc-event-time,
+  .calendar-host.fc .fc-timeGridWeek-view .event-icon:not(.is-inline),
+  .calendar-host.fc .fc-dayGridMonth-view .event-icon {
+    display: none;
+  }
+
+  .calendar-host.fc .fc-timeGridWeek-view .has-icon .fc-event-main,
+  .calendar-host.fc .fc-timeGridWeek-view .has-icon .fc-event-title-container,
+  .calendar-host.fc .fc-dayGridMonth-view .has-icon .fc-event-main,
+  .calendar-host.fc .fc-dayGridMonth-view .has-icon .fc-event-title-container {
+    padding-right: 0;
+  }
+
+  /* Week view: the name wraps on as many lines as the event is tall, breaking long words. */
+  .calendar-host.fc .fc-timeGridWeek-view .fc-timegrid-event .fc-event-main {
+    padding: 1px 2px;
+  }
+
+  .calendar-host.fc .fc-timeGridWeek-view .fc-event-title {
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+
+  /* Month view: one line per event, cut at the cell edge without an ellipsis wasting room. */
+  .calendar-host.fc .fc-dayGridMonth-view .fc-daygrid-event {
+    margin-left: 1px;
+    margin-right: 1px;
+  }
+
+  .calendar-host.fc .fc-dayGridMonth-view .fc-daygrid-event-dot {
+    margin: 0 2px;
+    border-width: 3px;
+    border-radius: 3px;
+  }
+
+  .calendar-host.fc .fc-dayGridMonth-view .fc-daygrid-block-event .fc-event-title {
+    padding: 1px 2px;
+  }
+
+  .calendar-host.fc .fc-dayGridMonth-view .fc-daygrid-more-link {
+    font-size: 0.7rem;
+  }
+
+  .calendar-host.fc .fc-col-header-cell-cushion {
+    padding: 2px 1px;
+    font-size: 0.75rem;
+  }
+
+  .calendar-host.fc .fc-timegrid-axis-cushion,
+  .calendar-host.fc .fc-timegrid-slot-label-cushion {
+    padding: 0 2px;
+    font-size: 0.7rem;
+  }
+}

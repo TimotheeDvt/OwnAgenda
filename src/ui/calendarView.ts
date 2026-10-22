@@ -50,6 +50,10 @@ const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   footer: { center: `capture ${VIEW_NAMES.join(',')}` },
 };
 
+// 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
+const WIDE_SLOT_LABEL = { hour: '2-digit', minute: '2-digit', hour12: false } as const;
+const NARROW_SLOT_LABEL = { hour: '2-digit', hour12: false } as const;
+
 function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
   const settings = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
   const { color, icon } = settings;
@@ -151,6 +155,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const initial = getSettings();
   const narrow = window.matchMedia(NARROW_QUERY);
   const toolbar = () => (narrow.matches ? NARROW_TOOLBAR : WIDE_TOOLBAR);
+  const slotLabelFormat = () => (narrow.matches ? NARROW_SLOT_LABEL : WIDE_SLOT_LABEL);
 
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
   let currentView: string = initial.defaultView;
@@ -172,7 +177,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
     allDayText: 'Full day',
     // 24-hour clock everywhere (time axis, event times, list view).
-    slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+    slotLabelFormat: slotLabelFormat(),
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
     height: '100%',
     nowIndicator: true,
@@ -255,6 +260,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const onResize = () => {
     calendar.setOption('headerToolbar', toolbar().header);
     calendar.setOption('footerToolbar', toolbar().footer);
+    calendar.setOption('slotLabelFormat', slotLabelFormat());
   };
   narrow.addEventListener('change', onResize);
 
