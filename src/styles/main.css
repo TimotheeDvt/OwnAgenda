@@ -1540,3 +1540,22 @@ body.is-resizing-sidebar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Read-only warning in the header corner (offline / session expired). */
+
+.save-status[data-state='readonly'] {
+  gap: 8px;
+}
+
+.readonly-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid var(--warning);
+  border-radius: 999px;
+  color: var(--warning);
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}

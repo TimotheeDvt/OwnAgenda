@@ -8,6 +8,7 @@ import {
   errorMessage,
   eventToDraft,
   getCalendarState,
+  readOnlyMessage,
   ruleOfEvent,
   subscriptionOf,
 } from '../store/calendarStore';
@@ -67,6 +68,11 @@ async function chooseScope(
 
 /** Opens the dialog for a new event over the selected range. */
 export async function createEventAt(times: EventTimes): Promise<void> {
+  const readOnly = getCalendarState().readOnly;
+  if (readOnly) {
+    showToast(readOnlyMessage(readOnly), 'warning');
+    return;
+  }
   const calendars = calendarOptions();
   if (calendars.length === 0) {
     showToast(
@@ -104,7 +110,8 @@ export function createEventNow(): Promise<void> {
 /** Opens the dialog for an existing event, then applies the edit or deletion. */
 export async function openEvent(event: AgendaEvent): Promise<void> {
   const subscription = subscriptionOf(event.calendarFileId);
-  if (subscription) {
+  const readOnly = getCalendarState().readOnly;
+  if (subscription || readOnly) {
     const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
     await openEventDialog({
       mode: 'edit',
@@ -113,9 +120,10 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
       draft: eventToDraft(event),
       timeZone: getSettings().timeZone,
       rule: event.recurring ? ruleOfEvent(event) : undefined,
-      readOnlyNote:
-        `This event comes from a subscribed online calendar (${new URL(subscription.url).host}). ` +
-        "It is updated from there every day and can't be edited here.",
+      readOnlyNote: readOnly
+        ? readOnlyMessage(readOnly)
+        : `This event comes from a subscribed online calendar (${new URL(subscription!.url).host}). ` +
+          "It is updated from there every day and can't be edited here.",
     });
     return;
   }

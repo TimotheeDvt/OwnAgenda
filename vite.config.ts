@@ -4,8 +4,9 @@ import { defineConfig } from 'vitest/config';
 // repository name; the fallback matches this repo's name.
 const REPO_BASE = '/OwnAgenda/';
 
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? (process.env.VITE_BASE ?? REPO_BASE) : '/',
+// The dev server runs at "/"; builds (and `npm run preview` of a build) use the Pages path.
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === 'build' || isPreview ? (process.env.VITE_BASE ?? REPO_BASE) : '/',
   server: { port: 5173, strictPort: true },
   test: {
     include: ['tests/**/*.test.ts'],

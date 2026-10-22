@@ -210,3 +210,48 @@ describe('offline copy', () => {
     expect(store.snapshotFiles()).toBeNull();
   });
 });
+
+describe('read-only mode (offline / session expired)', () => {
+  it('refuses changes while read-only', () => {
+    store.setReadOnly('offline');
+    expect(() => store.addEvent('cal-1', draft)).toThrow(/offline/);
+    expect(() => store.editEvent(eventByUid('single-1@test'), draft)).toThrow(/offline/);
+    expect(() => store.deleteEvent(eventByUid('single-1@test'))).toThrow(/offline/);
+    expect(() => store.renameCalendar('cal-1', 'x')).toThrow(/offline/);
+    store.setReadOnly(null);
+  });
+
+  it('keeps a change made just before the session expired, and saves it after reconnecting', async () => {
+    // The change is made, but its save fails because the session just expired.
+    fake.uploadError = new Error('Your Google session expired.');
+    store.addEvent('cal-1', draft);
+    await settle();
+    store.setReadOnly('expired');
+    expect(store.hasUnsavedChanges()).toBe(true);
+    expect(store.getCalendarState().readOnly).toBe('expired');
+
+    // Reconnected: the waiting change is saved.
+    fake.uploadError = null;
+    store.setReadOnly(null);
+    await settle();
+    expect(fake.uploads.at(-1)).toContain('SUMMARY:Planning');
+    expect(store.hasUnsavedChanges()).toBe(false);
+  });
+
+  it('becomes read-only when storage is unreachable and the offline copy is shown', async () => {
+    store.clearCalendars();
+    store.loadFromCache([
+      {
+        meta: { id: 'cal-1', name: 'work.ics', modifiedTime: 't1' },
+        content: fixture('single-event.ics'),
+      },
+    ]);
+    fake.offline = true;
+    await store.loadCalendars('Agendas/ics');
+    expect(store.getCalendarState().readOnly).toBe('offline');
+
+    fake.offline = false;
+    await store.loadCalendars('Agendas/ics');
+    expect(store.getCalendarState().readOnly).toBeNull();
+  });
+});

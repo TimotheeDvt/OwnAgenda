@@ -18,6 +18,8 @@ export class FakeStorage implements StorageProvider {
   settings: unknown = null;
   /** When true, listFiles fails like an unreachable server. */
   offline = false;
+  /** When set, uploads fail with this error (e.g. an expired session). */
+  uploadError: Error | null = null;
   private tick = 1;
 
   /** Replaces the folder content. */
@@ -25,6 +27,7 @@ export class FakeStorage implements StorageProvider {
     this.files.clear();
     this.uploads = [];
     this.offline = false;
+    this.uploadError = null;
     this.tick = 1;
   }
 
@@ -49,6 +52,7 @@ export class FakeStorage implements StorageProvider {
   }
 
   async upload(fileId: string, content: string) {
+    if (this.uploadError) throw this.uploadError;
     const file = this.files.get(fileId)!;
     file.content = content;
     file.modifiedTime = `t${++this.tick}`;

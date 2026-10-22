@@ -124,7 +124,28 @@ export async function loadSettings(): Promise<Settings> {
   return settings;
 }
 
+/** False while offline/read-only: changes apply locally and are written once it's back. */
+let persistenceEnabled = true;
+let changedWhilePaused = false;
+
+/**
+ * Pauses or resumes writing settings to storage. On resume, changes made in the meantime are
+ * written. Returns true if there were such changes (so they shouldn't be overwritten by a reload).
+ */
+export function setSettingsPersistence(enabled: boolean): boolean {
+  persistenceEnabled = enabled;
+  if (!enabled) return false;
+  const hadChanges = changedWhilePaused;
+  changedWhilePaused = false;
+  if (hadChanges) schedulePersist();
+  return hadChanges;
+}
+
 function schedulePersist(): void {
+  if (!persistenceEnabled) {
+    changedWhilePaused = true;
+    return;
+  }
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
@@ -203,6 +224,7 @@ export async function flushSettings(): Promise<void> {
 export function resetSettings(): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
+  changedWhilePaused = false;
   settings = defaultSettings();
   notify();
 }

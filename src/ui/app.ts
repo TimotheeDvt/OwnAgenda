@@ -1,4 +1,13 @@
-import { initAuth, isSignedIn, onAuthChange, signIn, signOut } from '../auth/auth';
+import {
+  getAuthState,
+  initAuth,
+  onAuthChange,
+  rememberAccount,
+  rememberedAccount,
+  signIn,
+  signOut,
+  type AuthState,
+} from '../auth/auth';
 import { storage, type StorageUser } from '../storage';
 import {
   clearCalendars,
@@ -10,10 +19,12 @@ import {
   loadCalendars,
   loadFromCache,
   onCalendarsChange,
+  readOnlyMessage,
   refreshCalendar,
   renameCalendar,
   retrySaves,
   setConflictHandler,
+  setReadOnly,
   setSaveErrorHandler,
   setSubscriptionErrorHandler,
   subscribeCalendar,
@@ -22,6 +33,7 @@ import {
   syncSubscription,
   snapshotFiles,
   type CalendarState,
+  type ReadOnlyReason,
 } from '../store/calendarStore';
 import { clearSnapshot, readSnapshot, writeSnapshot } from '../store/offlineCache';
 import {
@@ -33,6 +45,7 @@ import {
   onSettingsChange,
   onSettingsSaveError,
   resetSettings,
+  setSettingsPersistence,
   updateSettings,
   type Theme,
 } from '../store/settingsStore';
@@ -64,11 +77,15 @@ const SNAPSHOT_DEBOUNCE_MS = 1500;
 let layout: Layout;
 let calendarView: CalendarView | null = null;
 let sidebar: Sidebar | null = null;
-/** Incremented on every auth transition so stale async work can bail out. */
+/** Incremented on every session change so stale async work can bail out. */
 let session = 0;
 /** Account of the signed-in user, used to key the offline copy. */
 let accountEmail: string | null = null;
+let currentUser: StorageUser | null = null;
+/** When the offline copy being shown was saved (for the offline warning). */
+let snapshotSavedAt: string | null = null;
 let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+let resuming = false;
 
 function renderLayout(root: HTMLElement): Layout {
   root.innerHTML = `
@@ -112,6 +129,7 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
 // Header
 
 function renderUser(user: StorageUser | null): void {
+  currentUser = user;
   const nodes: Node[] = [];
   if (user) {
     if (user.photoUrl) {
@@ -144,8 +162,37 @@ const SAVE_LABELS: Record<CalendarState['saveStatus'], string> = {
   error: 'Not saved',
 };
 
+function formatSavedAt(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/** Save status, or — when nothing can be changed — a small warning (plus Reconnect). */
 function renderSaveStatus(state: CalendarState): void {
   const el = layout.saveStatus;
+  if (state.readOnly) {
+    el.dataset.state = 'readonly';
+    const chip = document.createElement('span');
+    chip.className = 'readonly-chip';
+    chip.textContent = state.readOnly === 'offline' ? '⚠ Offline · read-only' : '⚠ Session expired';
+    const savedAt = formatSavedAt(snapshotSavedAt);
+    chip.title =
+      readOnlyMessage(state.readOnly) +
+      (state.fromCache && savedAt ? `\nShowing the copy saved on this device (${savedAt}).` : '') +
+      (state.saveStatus === 'unsaved' ? '\nYour unsaved changes will be saved after that.' : '');
+    const nodes: Node[] = [chip];
+    if (state.readOnly === 'expired') {
+      nodes.push(button('Reconnect', 'btn btn-small btn-primary', () => void handleSignIn()));
+    }
+    el.replaceChildren(...nodes);
+    return;
+  }
   el.dataset.state = state.saveStatus;
   const label = document.createElement('span');
   label.textContent = SAVE_LABELS[state.saveStatus];
@@ -159,7 +206,7 @@ function renderSaveStatus(state: CalendarState): void {
 
 function setTheme(theme: Theme): void {
   applyTheme(theme);
-  if (isSignedIn() && getSettings().theme !== theme) updateSettings({ theme });
+  if (sidebar && getSettings().theme !== theme) updateSettings({ theme });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -187,6 +234,24 @@ function renderSignedOut(): void {
   layout.main.replaceChildren(welcome);
 }
 
+/** Session expired (or offline) and no offline copy to show: one tap to reconnect. */
+function renderReconnect(): void {
+  layout.sidebar.hidden = true;
+  layout.menu.hidden = true;
+  const box = document.createElement('div');
+  box.className = 'welcome';
+  const title = document.createElement('h2');
+  title.textContent = 'Welcome back';
+  const text = document.createElement('p');
+  text.textContent = navigator.onLine
+    ? `Reconnect to ${rememberedAccount() ?? 'your Google account'} to load your calendars.`
+    : "You're offline and there is no copy of your calendars on this device yet. " +
+      'Connect to the internet to load them.';
+  box.append(title, text);
+  if (navigator.onLine) box.appendChild(button('Reconnect', 'btn btn-primary', handleSignIn));
+  layout.main.replaceChildren(box);
+}
+
 function renderFatal(message: string): void {
   const box = document.createElement('div');
   box.className = 'welcome';
@@ -200,6 +265,13 @@ function renderFatal(message: string): void {
 
 // ---------------------------------------------------------------------------------------------
 // Actions
+
+/** Shows why an action isn't possible while read-only. Returns true if it is. */
+function blockedByReadOnly(): boolean {
+  const reason = getCalendarState().readOnly;
+  if (reason) showToast(readOnlyMessage(reason), 'warning');
+  return reason !== null;
+}
 
 /** Asks before an action that would drop unsaved calendar changes. */
 async function confirmDiscard(action: string, dirty = hasUnsavedChanges()): Promise<boolean> {
@@ -236,6 +308,7 @@ async function handleSignOut(): Promise<void> {
 }
 
 async function changeFolder(firstRun = false): Promise<void> {
+  if (blockedByReadOnly()) return;
   const path = await promptFolderPath(getSettings().folderPath, firstRun);
   if (!path) return;
   if (!(await confirmDiscard('Change folder'))) return;
@@ -247,6 +320,12 @@ async function changeFolder(firstRun = false): Promise<void> {
 async function reloadAll(): Promise<void> {
   const { folderPath } = getSettings();
   if (!folderPath || getCalendarState().status === 'loading') return;
+  // Read-only only because storage was unreachable, though we're online and signed in: retry.
+  if (getCalendarState().readOnly && currentReadOnlyReason() === null) {
+    await resumeOnline();
+    return;
+  }
+  if (blockedByReadOnly()) return;
   if (!(await confirmDiscard('Reload'))) return;
   await loadCalendars(folderPath);
   const state = getCalendarState();
@@ -257,7 +336,7 @@ async function reloadAll(): Promise<void> {
 
 async function refreshOne(fileId: string): Promise<void> {
   const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
-  if (!calendar) return;
+  if (!calendar || blockedByReadOnly()) return;
   // Subscribed calendar: download it again from its online source right now.
   if (subscriptionOf(fileId)) {
     try {
@@ -285,6 +364,7 @@ async function refreshOne(fileId: string): Promise<void> {
 }
 
 async function subscribe(): Promise<void> {
+  if (blockedByReadOnly()) return;
   const values = await promptForm({
     title: 'Subscribe to an online calendar',
     descriptionHtml:
@@ -332,6 +412,7 @@ async function setCorsProxy(): Promise<void> {
 }
 
 async function newCalendar(): Promise<void> {
+  if (blockedByReadOnly()) return;
   const name = await promptText({
     title: 'New calendar',
     descriptionHtml: `A new <code>.ics</code> file will be created in your folder on Google Drive.`,
@@ -350,7 +431,7 @@ async function newCalendar(): Promise<void> {
 
 async function renameOne(fileId: string): Promise<void> {
   const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
-  if (!calendar) return;
+  if (!calendar || blockedByReadOnly()) return;
   const name = await promptText({
     title: 'Rename calendar',
     descriptionHtml:
@@ -386,7 +467,7 @@ function scheduleSnapshot(): void {
   if (snapshotTimer) clearTimeout(snapshotTimer);
   snapshotTimer = setTimeout(() => {
     snapshotTimer = null;
-    if (!isSignedIn() || !accountEmail || !getSettings().offlineCache) return;
+    if (getAuthState() !== 'signedIn' || !accountEmail || !getSettings().offlineCache) return;
     const files = snapshotFiles();
     if (!files) return;
     void writeSnapshot({
@@ -399,19 +480,23 @@ function scheduleSnapshot(): void {
   }, SNAPSHOT_DEBOUNCE_MS);
 }
 
-/** Shows the offline copy of this account (if any) while Drive loads. Returns true if shown. */
-async function showOfflineCopy(user: StorageUser | null): Promise<boolean> {
+/**
+ * Shows the offline copy of this account (if any) until fresh data arrives. `email` is the
+ * account the copy must belong to (null: not known yet, offline). Returns true if shown.
+ */
+async function showOfflineCopy(email: string | null): Promise<boolean> {
   const snapshot = await readSnapshot();
   if (!snapshot) return false;
   // Copies saved before providers existed came from Google Drive.
   const sameStorage = (snapshot.provider ?? 'google-drive') === storage().id;
-  if (!sameStorage || (user && snapshot.email !== user.email)) {
+  if (!sameStorage || (email && snapshot.email !== email)) {
     // Another account (or storage) used this browser before: never show its data.
     await clearSnapshot();
     return false;
   }
   if (!normalizeSettings(snapshot.settings).offlineCache) return false;
   accountEmail = snapshot.email;
+  snapshotSavedAt = snapshot.savedAt;
   applyCachedSettings(snapshot.settings);
   loadFromCache(snapshot.files);
   return true;
@@ -422,6 +507,8 @@ async function showOfflineCopy(user: StorageUser | null): Promise<boolean> {
 
 function mountMain(): void {
   if (sidebar) return;
+  layout.sidebar.hidden = false;
+  layout.menu.hidden = false;
   applyTheme(getSettings().theme);
   sidebar = mountSidebar(layout.sidebar, {
     onChangeFolder: () => void changeFolder(),
@@ -439,27 +526,87 @@ function mountMain(): void {
   calendarView = mountCalendarView(layout.main);
 }
 
+/** Why nothing can be changed right now (no network, or session expired), or null. */
+function currentReadOnlyReason(): ReadOnlyReason | null {
+  if (!navigator.onLine) return 'offline';
+  return getAuthState() === 'expired' ? 'expired' : null;
+}
+
+/** Enters read-only mode when offline/expired, or resumes normal mode when both are fine. */
+function updateReadOnly(): void {
+  const reason = currentReadOnlyReason();
+  if (reason) {
+    setSettingsPersistence(false);
+    setReadOnly(reason);
+  } else if (getCalendarState().readOnly) {
+    void resumeOnline();
+  }
+}
+
+/**
+ * Back online with a valid session: save what was waiting, and replace the offline copy with
+ * fresh data from storage.
+ */
+async function resumeOnline(): Promise<void> {
+  if (resuming) return;
+  resuming = true;
+  const current = session;
+  try {
+    const settingsChanged = setSettingsPersistence(true);
+    const wasFromCache = getCalendarState().fromCache || getCalendarState().status === 'error';
+    setReadOnly(null);
+
+    if (!currentUser) {
+      try {
+        const user = await storage().getUser();
+        if (current !== session) return;
+        accountEmail = user.email;
+        rememberAccount(user.email);
+        renderUser(user);
+      } catch {
+        // Not critical.
+      }
+    }
+    if (wasFromCache) {
+      // Settings changed while offline are written, not overwritten by the stored ones.
+      if (!settingsChanged) await loadSettings().catch(() => {});
+      if (current !== session) return;
+      applyTheme(getSettings().theme);
+      const { folderPath } = getSettings();
+      if (folderPath) await loadCalendars(folderPath);
+    } else {
+      void syncStaleSubscriptions();
+    }
+  } finally {
+    resuming = false;
+  }
+}
+
 async function enterSignedIn(): Promise<void> {
   const current = ++session;
   renderUser(null);
-  layout.sidebar.hidden = false;
-  layout.menu.hidden = false;
   layout.main.replaceChildren();
 
   let user: StorageUser | null = null;
   try {
     user = await storage().getUser();
     accountEmail = user.email;
+    rememberAccount(user.email);
   } catch {
-    // Offline or Drive hiccup: the header just shows the sign-out button.
+    // Offline or storage hiccup: the header just shows the sign-out button.
   }
   if (current !== session) return;
   if (user) renderUser(user);
 
-  // Show the offline copy right away, then replace it with fresh data from Drive.
-  if (await showOfflineCopy(user)) {
-    if (current !== session) return;
-    mountMain();
+  // Show the offline copy right away, then replace it with fresh data.
+  const shownFromCache = await showOfflineCopy(user?.email ?? rememberedAccount());
+  if (current !== session) return;
+  if (shownFromCache) mountMain();
+
+  // No network: stay on the offline copy, read-only, until the connection comes back.
+  if (!navigator.onLine && shownFromCache) {
+    updateReadOnly();
+    return;
   }
 
   let settingsLoaded = true;
@@ -472,9 +619,7 @@ async function enterSignedIn(): Promise<void> {
     }
   }
   if (current !== session) return;
-  if (settingsLoaded) {
-    applyTheme(getSettings().theme);
-  }
+  if (settingsLoaded) applyTheme(getSettings().theme);
   mountMain();
 
   const { folderPath } = getSettings();
@@ -483,9 +628,28 @@ async function enterSignedIn(): Promise<void> {
   else if (settingsLoaded) await changeFolder(true);
 }
 
+/**
+ * Someone signed in on this device before, but there is no valid session (it expired, or no
+ * network): show the offline copy read-only, with Reconnect when online.
+ */
+async function enterReadOnlySession(): Promise<void> {
+  const current = ++session;
+  renderUser(null);
+  const shown = await showOfflineCopy(rememberedAccount());
+  if (current !== session) return;
+  if (!shown) {
+    renderReconnect();
+    return;
+  }
+  mountMain();
+  updateReadOnly();
+}
+
 function enterSignedOut(): void {
   session++;
   accountEmail = null;
+  currentUser = null;
+  snapshotSavedAt = null;
   if (snapshotTimer) clearTimeout(snapshotTimer);
   calendarView?.destroy();
   calendarView = null;
@@ -493,8 +657,17 @@ function enterSignedOut(): void {
   sidebar = null;
   clearCalendars();
   resetSettings();
+  setSettingsPersistence(true);
   storage().reset();
   renderSignedOut();
+}
+
+function onAuthStateChange(state: AuthState): void {
+  if (state === 'signedOut') enterSignedOut();
+  // With the app on screen, just switch between read-only and normal mode (no reload).
+  else if (sidebar) updateReadOnly();
+  else if (state === 'signedIn') void enterSignedIn();
+  else void enterReadOnlySession();
 }
 
 function setupSaving(): void {
@@ -523,7 +696,12 @@ function setupSaving(): void {
   // (switching back to it, waking the computer): that's when fresh data matters.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (isSignedIn() && getCalendarState().status === 'ready') void syncStaleSubscriptions();
+    // Coming back to the app after storage was unreachable: try again.
+    if (sidebar && getCalendarState().readOnly && currentReadOnlyReason() === null) {
+      void resumeOnline();
+    } else if (getAuthState() === 'signedIn' && getCalendarState().status === 'ready') {
+      void syncStaleSubscriptions();
+    }
   });
   setSaveErrorHandler((calendar, message) =>
     showToast(`Could not save "${calendar.displayName}": ${message}`, 'error'),
@@ -531,6 +709,8 @@ function setupSaving(): void {
   onCalendarsChange((state) => {
     renderSaveStatus(state);
     scheduleSnapshot();
+    // Also covers storage being unreachable while the device is online.
+    if (state.readOnly) setSettingsPersistence(false);
   });
   onSettingsChange(() => scheduleSnapshot());
   renderSaveStatus(getCalendarState());
@@ -576,13 +756,25 @@ export async function startApp(root: HTMLElement): Promise<void> {
   setupShortcuts();
 
   try {
-    await initAuth();
+    initAuth();
   } catch (err) {
     renderFatal(errorMessage(err));
     return;
   }
 
-  onAuthChange((signedIn) => (signedIn ? void enterSignedIn() : enterSignedOut()));
-  if (isSignedIn()) await enterSignedIn();
+  onAuthChange(onAuthStateChange);
+  // Network changes switch between read-only and normal mode.
+  window.addEventListener('online', () => {
+    if (sidebar) updateReadOnly();
+    else if (getAuthState() === 'expired') renderReconnect();
+  });
+  window.addEventListener('offline', () => {
+    if (sidebar) updateReadOnly();
+    else if (getAuthState() === 'expired') renderReconnect();
+  });
+
+  const state = getAuthState();
+  if (state === 'signedIn') await enterSignedIn();
+  else if (state === 'expired') await enterReadOnlySession();
   else renderSignedOut();
 }

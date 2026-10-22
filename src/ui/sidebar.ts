@@ -71,9 +71,12 @@ function iconButton(icon: IconName, label: string, onClick: () => void): HTMLBut
 function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElement[] {
   const path = getSettings().folderPath;
   const buttons = el('div', 'sidebar-buttons');
-  buttons.appendChild(
-    iconButton('edit', path ? 'Change folder' : 'Set folder', actions.onChangeFolder),
-  );
+  // Changing folder needs the network: hidden while read-only (offline / session expired).
+  if (!state.readOnly) {
+    buttons.appendChild(
+      iconButton('edit', path ? 'Change folder' : 'Set folder', actions.onChangeFolder),
+    );
+  }
   if (path) {
     const loading = state.status === 'loading';
     const reload = iconButton(
@@ -267,7 +270,9 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     );
 
     const tools = el('span', 'calendar-tools');
-    tools.append(visible, rename, refresh);
+    // Read-only (offline / session expired): only showing/hiding stays available.
+    if (state.readOnly) tools.append(visible);
+    else tools.append(visible, rename, refresh);
     item.append(handle, color, label, tools);
     list.appendChild(item);
   });
@@ -283,7 +288,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
 /** Buttons to add a calendar, once a Drive folder is loaded (they create files in it). */
 function renderAddButtons(actions: SidebarActions, state: CalendarState): HTMLElement[] {
-  if (!state.folderId) return [];
+  if (!state.folderId || state.readOnly) return [];
   const subscribe = button('+ Subscribe', 'btn btn-small', actions.onSubscribe);
   subscribe.title = 'Add an online calendar (e.g. your university timetable) from its .ics link';
   return [button('+ New calendar', 'btn btn-small', actions.onNewCalendar), subscribe];

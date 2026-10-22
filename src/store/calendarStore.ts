@@ -61,7 +61,15 @@ export interface CalendarState {
   refreshing: string[];
   saveStatus: SaveStatus;
   saveError: string | null;
+  /**
+   * Why nothing can be changed right now, or null when editing is possible:
+   * - offline: no network (or storage unreachable); showing the offline copy
+   * - expired: the sign-in session expired; waiting for the user to reconnect
+   */
+  readOnly: ReadOnlyReason | null;
 }
+
+export type ReadOnlyReason = 'offline' | 'expired';
 
 export type CalendarListener = (state: CalendarState) => void;
 /** "later" keeps the changes unsaved; saving again asks again. */
@@ -77,6 +85,7 @@ const initialState = (): CalendarState => ({
   refreshing: [],
   saveStatus: 'idle',
   saveError: null,
+  readOnly: null,
 });
 
 let state: CalendarState = initialState();
@@ -161,7 +170,16 @@ export async function loadCalendars(folderPath: string): Promise<void> {
       else warnings.push(`${files[i]?.name ?? 'File'}: ${errorMessage(result.reason)}`);
     });
     if (files.length === 0) warnings.push(`No .ics files found in "${folderPath}".`);
-    setState({ status: 'ready', calendars, warnings, folderId, fromCache: false, refreshing: [] });
+    setState({
+      status: 'ready',
+      calendars,
+      warnings,
+      folderId,
+      fromCache: false,
+      refreshing: [],
+      // Storage answered, so we are online again.
+      readOnly: state.readOnly === 'offline' ? null : state.readOnly,
+    });
     // Subscriptions whose copy is more than a day old are re-downloaded in the background.
     void syncStaleSubscriptions();
   } catch (err) {
@@ -169,6 +187,7 @@ export async function loadCalendars(folderPath: string): Promise<void> {
     if (state.fromCache && state.calendars.length > 0) {
       setState({
         status: 'ready',
+        readOnly: state.readOnly ?? 'offline',
         warnings: [
           `Could not reach Google Drive (${errorMessage(err)}). Showing the copy saved on this device.`,
         ],
@@ -199,6 +218,7 @@ export async function reloadCalendar(fileId: string): Promise<void> {
  * one shown.
  */
 export async function refreshCalendar(fileId: string): Promise<'updated' | 'unchanged'> {
+  assertWritable();
   const before = findCalendar(fileId);
   if (!before) throw new Error('That calendar is no longer loaded.');
   setState({ refreshing: [...state.refreshing, fileId] });
@@ -300,7 +320,27 @@ function requireCalendar(fileId: string): CalendarFile {
 }
 
 /** Subscribed calendars are copies of an online calendar: their events can't be edited. */
+export function readOnlyMessage(reason: ReadOnlyReason): string {
+  return reason === 'offline'
+    ? "You're offline: the calendars are read-only until the connection is back."
+    : 'Your Google session expired: reconnect to make changes.';
+}
+
+/** Throws while changes are impossible (offline, or the session expired). */
+function assertWritable(): void {
+  if (state.readOnly) throw new Error(readOnlyMessage(state.readOnly));
+}
+
+/** Enters or leaves read-only mode. Leaving it saves the changes that were waiting. */
+export function setReadOnly(reason: ReadOnlyReason | null): void {
+  if (state.readOnly === reason) return;
+  setState({ readOnly: reason });
+  if (!reason) retrySaves();
+  else updateSaveStatus();
+}
+
 function requireEditable(fileId: string): CalendarFile {
+  assertWritable();
   const calendar = requireCalendar(fileId);
   if (subscriptionInfo(calendar.vcalendar)) {
     throw new Error(`"${calendar.displayName}" is a subscribed calendar and can't be edited.`);
@@ -433,6 +473,7 @@ function fileNameFor(name: string): string {
 export async function createCalendar(name: string): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Please enter a name.');
+  assertWritable();
   if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
   const generation = loadGeneration;
   const content = serializeCalendar(newCalendarComponent(trimmed));
@@ -450,6 +491,7 @@ export async function createCalendar(name: string): Promise<string> {
 export function renameCalendar(fileId: string, name: string): void {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Please enter a name.');
+  assertWritable();
   const calendar = requireCalendar(fileId);
   mutate([calendar], () => {
     renameCalendarComponent(calendar.vcalendar, trimmed);
@@ -473,6 +515,7 @@ export async function subscribeCalendar(name: string, link: string): Promise<str
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Please enter a name.');
   const url = normalizeSubscriptionUrl(link);
+  assertWritable();
   if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
   const folderId = state.folderId;
   const generation = loadGeneration;
@@ -495,6 +538,7 @@ export async function syncSubscription(
   fileId: string,
   options: { force?: boolean } = {},
 ): Promise<'updated' | 'fresh'> {
+  assertWritable();
   let calendar = requireCalendar(fileId);
   let info = subscriptionInfo(calendar.vcalendar);
   if (!info) throw new Error(`"${calendar.displayName}" is not a subscribed calendar.`);
@@ -531,6 +575,7 @@ export async function syncSubscription(
 
 /** Updates every subscription whose copy is more than a day old (one at a time). */
 export async function syncStaleSubscriptions(): Promise<void> {
+  if (state.readOnly) return;
   const generation = loadGeneration;
   const stale = state.calendars.filter((c) => {
     const info = subscriptionInfo(c.vcalendar);
@@ -571,6 +616,11 @@ function updateSaveStatus(): void {
 
 /** Saves a calendar if it has changes. Saves of the same file run one at a time. */
 export function requestSave(fileId: string): Promise<void> {
+  // Read-only: keep the changes (still dirty); they are saved when editing is possible again.
+  if (state.readOnly) {
+    updateSaveStatus();
+    return Promise.resolve();
+  }
   const running = runningSaves.get(fileId);
   if (running) {
     pendingResaves.add(fileId);
@@ -624,6 +674,7 @@ async function runSave(fileId: string): Promise<void> {
 
 /** Retries every calendar that still has unsaved changes. */
 export function retrySaves(): void {
+  if (state.readOnly) return;
   saveErrors.clear();
   for (const calendar of state.calendars) if (calendar.dirty) void requestSave(calendar.fileId);
   updateSaveStatus();

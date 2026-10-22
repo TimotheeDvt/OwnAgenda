@@ -148,7 +148,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
           .calendars.filter((c) => subscriptionOf(c.fileId))
           .map((c) => c.fileId),
       );
-      success(events.map((e) => toEventInput(e, subscribed.has(e.calendarFileId))));
+      // Offline / session expired: nothing can be dragged or resized.
+      const readOnly = getCalendarState().readOnly !== null;
+      success(events.map((e) => toEventInput(e, readOnly || subscribed.has(e.calendarFileId))));
     },
     eventDidMount: (info) => {
       const agendaEvent = agendaEventOf(info.event);
@@ -178,10 +180,20 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     last = s;
   });
   let lastCalendars = getCalendarState().calendars;
+  let lastReadOnly = getCalendarState().readOnly;
+  const applyReadOnly = (readOnly: boolean) => {
+    // No selecting a range to create an event while nothing can be saved.
+    calendar.setOption('selectable', !readOnly);
+    host.classList.toggle('is-read-only', readOnly);
+  };
+  applyReadOnly(lastReadOnly !== null);
   const offCalendars = onCalendarsChange((state) => {
-    // Save-status updates don't change events; only refetch when calendar data changed.
-    if (state.calendars === lastCalendars) return;
+    // Save-status updates don't change events; only refetch when calendar data or the
+    // read-only mode changed.
+    if (state.calendars === lastCalendars && state.readOnly === lastReadOnly) return;
+    if (state.readOnly !== lastReadOnly) applyReadOnly(state.readOnly !== null);
     lastCalendars = state.calendars;
+    lastReadOnly = state.readOnly;
     calendar.refetchEvents();
   });
 
