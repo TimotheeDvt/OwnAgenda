@@ -72,6 +72,7 @@ function buildEvent(
   startTime: ICAL.Time,
   endTime: ICAL.Time,
   recurring: boolean,
+  recurrenceId?: ICAL.Time,
 ): AgendaEvent {
   const startTzid = tzidOf(component, 'dtstart');
   const start = timeToInstant(startTime, startTzid);
@@ -87,6 +88,7 @@ function buildEvent(
     location: textProp(component, 'location'),
     description: textProp(component, 'description'),
     recurring,
+    recurrenceId: recurrenceId?.clone(),
     startInput: start.input,
     endInput: end.input,
   };
@@ -165,6 +167,7 @@ export function expandCalendar(
         details.startDate,
         details.endDate,
         true,
+        details.recurrenceId,
       );
       if (overlaps(occ, range)) result.push(occ);
     }
@@ -181,6 +184,7 @@ export function expandCalendar(
         event.startDate,
         event.endDate,
         false,
+        event.recurrenceId ?? undefined,
       );
       if (overlaps(occ, range)) result.push(occ);
     }

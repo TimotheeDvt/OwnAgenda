@@ -1,15 +1,19 @@
 import type { EventDraft } from '../ics/edit';
+import type { EditScope } from '../ics/recurringEdit';
 import {
   addEvent,
   calendarIndex,
   deleteEvent,
   editEvent,
   errorMessage,
+  eventToDraft,
   getCalendarState,
+  ruleOfEvent,
 } from '../store/calendarStore';
 import { getCalendarSettings, getSettings } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { eventInputToIso } from '../util/dates';
+import { instantToWall, wallToInstant } from '../util/dates';
+import { chooseOption, type Choice } from './choiceDialog';
 import { openEventDialog, type CalendarOption } from './eventDialog';
 import { showToast } from './toast';
 
@@ -30,23 +34,34 @@ function run(action: () => void): boolean {
   }
 }
 
-function eventToDraft(event: AgendaEvent): EventDraft {
-  const { timeZone } = getSettings();
-  return {
-    title: event.title,
-    allDay: event.allDay,
-    start: event.allDay ? event.startInput : eventInputToIso(event.startInput, timeZone),
-    end: event.allDay ? event.endInput : eventInputToIso(event.endInput, timeZone),
-    location: event.location,
-    description: event.description,
-  };
+/** Asks which occurrences of a series a change applies to. Null if cancelled. */
+async function chooseScope(
+  action: 'edit' | 'delete',
+  allow: { this: boolean; following: boolean },
+): Promise<EditScope | null> {
+  const choices: Choice<EditScope | 'cancel'>[] = [{ value: 'cancel', label: 'Cancel' }];
+  if (allow.this) choices.push({ value: 'this', label: 'This event' });
+  if (allow.following) choices.push({ value: 'following', label: 'This and following' });
+  choices.push({
+    value: 'all',
+    label: 'All events',
+    kind: action === 'delete' ? 'danger' : 'primary',
+  });
+  const choice = await chooseOption(
+    action === 'delete' ? 'Delete recurring event' : 'Edit recurring event',
+    action === 'delete'
+      ? 'This event repeats. Which occurrences do you want to delete?'
+      : 'This event repeats. Which occurrences should the change apply to?',
+    choices,
+  );
+  return choice && choice !== 'cancel' ? choice : null;
 }
 
 /** Opens the dialog for a new event over the selected range. */
 export async function createEventAt(times: EventTimes): Promise<void> {
   const calendars = calendarOptions();
   if (calendars.length === 0) {
-    showToast('There is no calendar to add the event to. Add an .ics file to your folder first.');
+    showToast('There is no calendar to add the event to. Create one in the sidebar first.');
     return;
   }
   const firstVisible = calendars.find(
@@ -62,27 +77,60 @@ export async function createEventAt(times: EventTimes): Promise<void> {
   if (result?.action === 'save') run(() => addEvent(result.calendarFileId, result.draft));
 }
 
-/** Opens the dialog for an existing event (read-only for recurring events). */
+/** New one-hour event starting at the next full hour (keyboard shortcut). */
+export function createEventNow(): Promise<void> {
+  const { timeZone } = getSettings();
+  const now = instantToWall(Date.now(), timeZone);
+  const hour = Number(now.time.slice(0, 2));
+  const start =
+    wallToInstant(now.date, `${String(hour).padStart(2, '0')}:00`, timeZone) + 3_600_000;
+  return createEventAt({
+    allDay: false,
+    start: new Date(start).toISOString(),
+    end: new Date(start + 3_600_000).toISOString(),
+  });
+}
+
+/** Opens the dialog for an existing event, then applies the edit or deletion. */
 export async function openEvent(event: AgendaEvent): Promise<void> {
   const result = await openEventDialog({
     mode: 'edit',
-    readOnly: event.recurring,
     calendars: calendarOptions(),
     calendarFileId: event.calendarFileId,
     draft: eventToDraft(event),
     timeZone: getSettings().timeZone,
+    rule: event.recurring ? ruleOfEvent(event) : undefined,
+    occurrence: event.recurring,
   });
   if (!result) return;
+
   if (result.action === 'delete') {
-    if (run(() => deleteEvent(event.calendarFileId, event.uid))) showToast('Event deleted.');
-  } else {
-    run(() => editEvent(event.calendarFileId, event.uid, result.draft, result.calendarFileId));
+    let scope: EditScope = 'all';
+    if (event.recurring) {
+      const chosen = await chooseScope('delete', { this: true, following: true });
+      if (!chosen) return;
+      scope = chosen;
+    }
+    if (run(() => deleteEvent(event, scope))) showToast('Event deleted.');
+    return;
   }
+
+  const targetFileId = result.calendarFileId;
+  if (!event.recurring) {
+    run(() => editEvent(event, result.draft, { targetFileId }));
+    return;
+  }
+  const moving = targetFileId !== event.calendarFileId;
+  const ruleChanged = result.draft.rrule !== undefined;
+  const scope = await chooseScope('edit', { this: !moving && !ruleChanged, following: !moving });
+  if (scope) run(() => editEvent(event, result.draft, { scope, targetFileId }));
 }
 
-/** Applies a drag & drop move or a resize. Returns false if it failed (the caller reverts). */
-export function changeEventTimes(event: AgendaEvent, times: EventTimes): boolean {
-  return run(() =>
-    editEvent(event.calendarFileId, event.uid, { ...eventToDraft(event), ...times }),
-  );
+/** Applies a drag & drop move or a resize. Resolves false if cancelled or failed (to revert). */
+export async function changeEventTimes(event: AgendaEvent, times: EventTimes): Promise<boolean> {
+  const draft = { ...eventToDraft(event), ...times };
+  if (!event.recurring) return run(() => editEvent(event, draft));
+  const scope = await chooseScope('edit', { this: true, following: true });
+  if (!scope) return false;
+  return run(() => editEvent(event, draft, { scope }));
 }

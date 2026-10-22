@@ -13,6 +13,11 @@ export function addDays(date: string, days: number): string {
   return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+/** Whole days from `b` to `a`, both "YYYY-MM-DD". */
+export function diffDays(a: string, b: string): number {
+  return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
+}
+
 /** Splits an instant into date ("YYYY-MM-DD") and time ("HH:mm") inputs in the given zone. */
 export function instantToWall(ms: number, timeZone: string): { date: string; time: string } {
   const a = epochToZonedArray(ms, timeZone);

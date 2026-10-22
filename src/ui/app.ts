@@ -3,49 +3,70 @@ import { resetAppDataCache } from '../drive/appData';
 import { getCurrentUser, type DriveUser } from '../drive/files';
 import {
   clearCalendars,
+  createCalendar,
   errorMessage,
   getCalendarState,
   hasUnsavedChanges,
+  isCalendarDirty,
   loadCalendars,
+  loadFromCache,
   onCalendarsChange,
+  refreshCalendar,
+  renameCalendar,
   retrySaves,
   setConflictHandler,
   setSaveErrorHandler,
+  snapshotFiles,
   type CalendarState,
 } from '../store/calendarStore';
+import { clearSnapshot, readSnapshot, writeSnapshot } from '../store/offlineCache';
 import {
+  applyCachedSettings,
   flushSettings,
   getSettings,
   loadSettings,
+  normalizeSettings,
+  onSettingsChange,
   onSettingsSaveError,
   resetSettings,
   updateSettings,
   type Theme,
 } from '../store/settingsStore';
+import type { AgendaEvent } from '../types';
 import { mountCalendarView, type CalendarView } from './calendarView';
 import { chooseOption } from './choiceDialog';
-import { promptFolderPath } from './folderPrompt';
-import { mountSidebar } from './sidebar';
+import { createEventNow, openEvent } from './eventActions';
+import { installShortcuts, showShortcutsHelp } from './shortcuts';
+import { mountSidebar, type Sidebar } from './sidebar';
+import { promptFolderPath, promptText } from './textPrompt';
 import { applyTheme, cachedTheme } from './theme';
 import { showToast } from './toast';
 
 interface Layout {
+  menu: HTMLButtonElement;
   saveStatus: HTMLElement;
   theme: HTMLSelectElement;
   user: HTMLElement;
   sidebar: HTMLElement;
+  backdrop: HTMLElement;
   main: HTMLElement;
 }
 
+const SNAPSHOT_DEBOUNCE_MS = 1500;
+
 let layout: Layout;
 let calendarView: CalendarView | null = null;
-let unmountSidebar: (() => void) | null = null;
+let sidebar: Sidebar | null = null;
 /** Incremented on every auth transition so stale async work can bail out. */
 let session = 0;
+/** Account of the signed-in user, used to key the offline copy. */
+let accountEmail: string | null = null;
+let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
 
 function renderLayout(root: HTMLElement): Layout {
   root.innerHTML = `
     <header class="app-header">
+      <button type="button" class="icon-btn menu-btn" aria-label="Show calendars" hidden>☰</button>
       <h1 class="app-title">ICS Agenda</h1>
       <div class="header-actions">
         <div class="save-status" aria-live="polite"></div>
@@ -58,14 +79,17 @@ function renderLayout(root: HTMLElement): Layout {
       </div>
     </header>
     <div class="app-body">
-      <aside class="sidebar" aria-label="Calendars"></aside>
+      <aside class="sidebar" id="sidebar" aria-label="Calendars"></aside>
+      <div class="sidebar-backdrop"></div>
       <main class="calendar-host"></main>
     </div>`;
   return {
+    menu: root.querySelector('.menu-btn')!,
     saveStatus: root.querySelector('.save-status')!,
     theme: root.querySelector('.theme-select')!,
     user: root.querySelector('.header-user')!,
     sidebar: root.querySelector('.sidebar')!,
+    backdrop: root.querySelector('.sidebar-backdrop')!,
     main: root.querySelector('.calendar-host')!,
   };
 }
@@ -78,6 +102,9 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   btn.addEventListener('click', onClick);
   return btn;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Header
 
 function renderUser(user: DriveUser | null): void {
   const nodes: Node[] = [];
@@ -127,9 +154,22 @@ function setTheme(theme: Theme): void {
   if (isSignedIn() && getSettings().theme !== theme) updateSettings({ theme });
 }
 
+// ---------------------------------------------------------------------------------------------
+// Sidebar drawer (narrow screens)
+
+function setDrawer(open: boolean): void {
+  document.body.classList.toggle('sidebar-open', open);
+  layout.menu.setAttribute('aria-expanded', String(open));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Screens
+
 function renderSignedOut(): void {
   layout.user.replaceChildren(button('Sign in with Google', 'btn btn-primary', handleSignIn));
   layout.sidebar.hidden = true;
+  layout.menu.hidden = true;
+  setDrawer(false);
   const welcome = document.createElement('div');
   welcome.className = 'welcome';
   welcome.innerHTML = `
@@ -150,9 +190,12 @@ function renderFatal(message: string): void {
   layout.main.replaceChildren(box);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Actions
+
 /** Asks before an action that would drop unsaved calendar changes. */
-async function confirmDiscard(action: string): Promise<boolean> {
-  if (!hasUnsavedChanges()) return true;
+async function confirmDiscard(action: string, dirty = hasUnsavedChanges()): Promise<boolean> {
+  if (!dirty) return true;
   const choice = await chooseOption(
     'Unsaved changes',
     `Some changes haven't been saved to Google Drive yet. ${action} anyway and lose them?`,
@@ -179,6 +222,8 @@ async function handleSignOut(): Promise<void> {
   } catch {
     // Signing out anyway; the last setting change is lost.
   }
+  // Signing out explicitly also removes the offline copy from this device.
+  await clearSnapshot();
   signOut();
 }
 
@@ -190,42 +235,179 @@ async function changeFolder(firstRun = false): Promise<void> {
   await loadCalendars(path);
 }
 
+/** Re-lists the folder and downloads every calendar again from Drive. */
 async function reloadAll(): Promise<void> {
+  const { folderPath } = getSettings();
+  if (!folderPath || getCalendarState().status === 'loading') return;
   if (!(await confirmDiscard('Reload'))) return;
-  await loadCalendars(getSettings().folderPath);
+  await loadCalendars(folderPath);
+  const state = getCalendarState();
+  if (state.status === 'ready' && !state.fromCache) {
+    showToast(`${state.calendars.length} calendar(s) reloaded from Google Drive.`, 'success');
+  }
+}
+
+async function refreshOne(fileId: string): Promise<void> {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
+  if (!calendar) return;
+  if (!(await confirmDiscard(`Refresh "${calendar.displayName}"`, isCalendarDirty(fileId)))) {
+    return;
+  }
+  try {
+    const result = await refreshCalendar(fileId);
+    showToast(
+      result === 'updated'
+        ? `"${calendar.displayName}" was updated from Google Drive.`
+        : `"${calendar.displayName}" is up to date.`,
+      'success',
+    );
+  } catch (err) {
+    showToast(`Could not refresh "${calendar.displayName}": ${errorMessage(err)}`, 'error');
+  }
+}
+
+async function newCalendar(): Promise<void> {
+  const name = await promptText({
+    title: 'New calendar',
+    descriptionHtml: `A new <code>.ics</code> file will be created in your folder on Google Drive.`,
+    label: 'Name',
+    placeholder: 'Family',
+    submitLabel: 'Create',
+  });
+  if (!name) return;
+  try {
+    await createCalendar(name);
+    showToast(`Calendar "${name}" created.`, 'success');
+  } catch (err) {
+    showToast(`Could not create the calendar: ${errorMessage(err)}`, 'error');
+  }
+}
+
+async function renameOne(fileId: string): Promise<void> {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
+  if (!calendar) return;
+  const name = await promptText({
+    title: 'Rename calendar',
+    descriptionHtml:
+      'The name is stored in the calendar file (<code>X-WR-CALNAME</code>); the file name on ' +
+      'Google Drive stays the same.',
+    label: 'Name',
+    value: calendar.displayName,
+  });
+  if (!name || name === calendar.displayName) return;
+  try {
+    renameCalendar(fileId, name);
+  } catch (err) {
+    showToast(errorMessage(err), 'error');
+  }
+}
+
+function pickSearchResult(event: AgendaEvent): void {
+  setDrawer(false);
+  calendarView?.showEvent(event);
+  void openEvent(event);
+}
+
+async function toggleOfflineCache(enabled: boolean): Promise<void> {
+  updateSettings({ offlineCache: enabled });
+  if (enabled) scheduleSnapshot();
+  else await clearSnapshot();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Offline copy
+
+function scheduleSnapshot(): void {
+  if (snapshotTimer) clearTimeout(snapshotTimer);
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = null;
+    if (!isSignedIn() || !accountEmail || !getSettings().offlineCache) return;
+    const files = snapshotFiles();
+    if (!files) return;
+    void writeSnapshot({
+      email: accountEmail,
+      settings: getSettings(),
+      files,
+      savedAt: new Date().toISOString(),
+    });
+  }, SNAPSHOT_DEBOUNCE_MS);
+}
+
+/** Shows the offline copy of this account (if any) while Drive loads. Returns true if shown. */
+async function showOfflineCopy(user: DriveUser | null): Promise<boolean> {
+  const snapshot = await readSnapshot();
+  if (!snapshot) return false;
+  if (user && snapshot.email !== user.emailAddress) {
+    // Another account used this browser before: never show its data.
+    await clearSnapshot();
+    return false;
+  }
+  if (!normalizeSettings(snapshot.settings).offlineCache) return false;
+  accountEmail = snapshot.email;
+  applyCachedSettings(snapshot.settings);
+  loadFromCache(snapshot.files);
+  return true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Session
+
+function mountMain(): void {
+  if (sidebar) return;
+  applyTheme(getSettings().theme);
+  layout.theme.value = getSettings().theme;
+  sidebar = mountSidebar(layout.sidebar, {
+    onChangeFolder: () => void changeFolder(),
+    onReload: () => void reloadAll(),
+    onRefreshCalendar: (fileId) => void refreshOne(fileId),
+    onRenameCalendar: (fileId) => void renameOne(fileId),
+    onNewCalendar: () => void newCalendar(),
+    onPickSearchResult: pickSearchResult,
+    onToggleOfflineCache: (enabled) => void toggleOfflineCache(enabled),
+    onShowShortcuts: showShortcutsHelp,
+  });
+  layout.main.replaceChildren();
+  calendarView = mountCalendarView(layout.main);
 }
 
 async function enterSignedIn(): Promise<void> {
   const current = ++session;
   renderUser(null);
   layout.sidebar.hidden = false;
+  layout.menu.hidden = false;
   layout.main.replaceChildren();
 
-  getCurrentUser()
-    .then((user) => current === session && renderUser(user))
-    .catch(() => {
-      // Not critical: the header just shows the sign-out button.
-    });
+  let user: DriveUser | null = null;
+  try {
+    user = await getCurrentUser();
+    accountEmail = user.emailAddress;
+  } catch {
+    // Offline or Drive hiccup: the header just shows the sign-out button.
+  }
+  if (current !== session) return;
+  if (user) renderUser(user);
+
+  // Show the offline copy right away, then replace it with fresh data from Drive.
+  if (await showOfflineCopy(user)) {
+    if (current !== session) return;
+    mountMain();
+  }
 
   let settingsLoaded = true;
   try {
     await loadSettings();
   } catch (err) {
     settingsLoaded = false;
-    showToast(`Could not load settings: ${errorMessage(err)}`, 'error');
+    if (!getCalendarState().fromCache) {
+      showToast(`Could not load settings: ${errorMessage(err)}`, 'error');
+    }
   }
   if (current !== session) return;
-
   if (settingsLoaded) {
     applyTheme(getSettings().theme);
     layout.theme.value = getSettings().theme;
   }
-
-  unmountSidebar = mountSidebar(layout.sidebar, {
-    onChangeFolder: () => void changeFolder(),
-    onReload: () => void reloadAll(),
-  });
-  calendarView = mountCalendarView(layout.main);
+  mountMain();
 
   const { folderPath } = getSettings();
   if (folderPath) await loadCalendars(folderPath);
@@ -235,10 +417,12 @@ async function enterSignedIn(): Promise<void> {
 
 function enterSignedOut(): void {
   session++;
+  accountEmail = null;
+  if (snapshotTimer) clearTimeout(snapshotTimer);
   calendarView?.destroy();
   calendarView = null;
-  unmountSidebar?.();
-  unmountSidebar = null;
+  sidebar?.destroy();
+  sidebar = null;
   clearCalendars();
   resetSettings();
   resetAppDataCache();
@@ -263,11 +447,34 @@ function setupSaving(): void {
   setSaveErrorHandler((calendar, message) =>
     showToast(`Could not save "${calendar.displayName}": ${message}`, 'error'),
   );
-  onCalendarsChange(renderSaveStatus);
+  onCalendarsChange((state) => {
+    renderSaveStatus(state);
+    scheduleSnapshot();
+  });
+  onSettingsChange(() => scheduleSnapshot());
   renderSaveStatus(getCalendarState());
 
   window.addEventListener('beforeunload', (e) => {
     if (hasUnsavedChanges()) e.preventDefault();
+  });
+}
+
+function setupShortcuts(): void {
+  const whenReady = (action: (view: CalendarView) => void) => () => {
+    if (calendarView) action(calendarView);
+  };
+  installShortcuts({
+    today: whenReady((v) => v.today()),
+    prev: whenReady((v) => v.prev()),
+    next: whenReady((v) => v.next()),
+    changeView: (view) => calendarView?.changeView(view),
+    newEvent: whenReady(() => void createEventNow()),
+    focusSearch: () => {
+      if (!sidebar) return;
+      setDrawer(true);
+      sidebar.focusSearch();
+    },
+    reloadAll: () => void reloadAll(),
   });
 }
 
@@ -277,9 +484,15 @@ export async function startApp(root: HTMLElement): Promise<void> {
   applyTheme(theme);
   layout.theme.value = theme;
   layout.theme.addEventListener('change', () => setTheme(layout.theme.value as Theme));
+  layout.menu.addEventListener('click', () =>
+    setDrawer(!document.body.classList.contains('sidebar-open')),
+  );
+  layout.backdrop.addEventListener('click', () => setDrawer(false));
+  layout.menu.setAttribute('aria-controls', 'sidebar');
 
   onSettingsSaveError((err) => showToast(`Could not save settings: ${errorMessage(err)}`, 'error'));
   setupSaving();
+  setupShortcuts();
 
   try {
     await initAuth();

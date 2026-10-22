@@ -18,6 +18,8 @@ export interface Settings {
   weekStartsOn: number;
   timeZone: string;
   theme: Theme;
+  /** Keep a copy of the calendars in this browser (IndexedDB) for fast startup and offline use. */
+  offlineCache: boolean;
   calendars: Record<string, CalendarSettings>;
 }
 
@@ -31,6 +33,7 @@ export function defaultSettings(): Settings {
     weekStartsOn: 1,
     timeZone: browserTimeZone(),
     theme: 'system',
+    offlineCache: true,
     calendars: {},
   };
 }
@@ -78,6 +81,7 @@ export function normalizeSettings(raw: unknown): Settings {
         ? raw.timeZone
         : defaults.timeZone,
     theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : defaults.theme,
+    offlineCache: typeof raw.offlineCache === 'boolean' ? raw.offlineCache : defaults.offlineCache,
     calendars,
   };
 }
@@ -93,6 +97,12 @@ function notify(): void {
 
 export function getSettings(): Settings {
   return settings;
+}
+
+/** Shows settings from the offline copy until Drive answers (not written back to Drive). */
+export function applyCachedSettings(raw: unknown): void {
+  settings = normalizeSettings(raw);
+  notify();
 }
 
 export async function loadSettings(): Promise<Settings> {

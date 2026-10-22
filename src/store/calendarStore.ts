@@ -1,10 +1,39 @@
-import { downloadFile, getFileMeta, listIcsFiles, resolvePath, uploadFile } from '../drive/files';
-import { createEvent, findMasterEvent, moveEvent, removeEvent, updateEvent } from '../ics/edit';
-import type { EventDraft } from '../ics/edit';
+import {
+  createFile,
+  downloadFile,
+  getFileMeta,
+  listIcsFiles,
+  resolvePath,
+  uploadFile,
+  type DriveFileMeta,
+} from '../drive/files';
+import {
+  createEvent,
+  moveComponents,
+  moveEvent,
+  newCalendarComponent,
+  removeEvent,
+  renameCalendarComponent,
+  updateEvent,
+  type EventDraft,
+} from '../ics/edit';
 import { toCalendarFile } from '../ics/parse';
 import { expandCalendar } from '../ics/recurrence';
+import {
+  deleteFollowing,
+  deleteOccurrence,
+  editFollowing,
+  editOccurrence,
+  editSeries,
+  seriesRule,
+  type EditScope,
+  type OccurrenceRef,
+} from '../ics/recurringEdit';
+import type { SimpleRule } from '../ics/rrule';
 import { serializeCalendar } from '../ics/serialize';
 import type { AgendaEvent, CalendarFile, DateRange } from '../types';
+import { eventInputToIso } from '../util/dates';
+import type { CachedFile } from './offlineCache';
 import { getSettings } from './settingsStore';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -24,6 +53,12 @@ export interface CalendarState {
   /** Per-file problems that didn't stop the other calendars from loading. */
   warnings: string[];
   calendars: CalendarFile[];
+  /** Drive ID of the loaded folder (needed to create calendars). */
+  folderId: string | null;
+  /** True while the calendars come from the offline copy rather than from Drive. */
+  fromCache: boolean;
+  /** Calendars currently being refreshed from Drive. */
+  refreshing: string[];
   saveStatus: SaveStatus;
   saveError: string | null;
 }
@@ -37,6 +72,9 @@ const initialState = (): CalendarState => ({
   error: null,
   warnings: [],
   calendars: [],
+  folderId: null,
+  fromCache: false,
+  refreshing: [],
   saveStatus: 'idle',
   saveError: null,
 });
@@ -79,9 +117,29 @@ function resetSaveTracking(): void {
   savedOnce = false;
 }
 
+const byName = (a: CalendarFile, b: CalendarFile) => a.name.localeCompare(b.name);
+
+// ---------------------------------------------------------------------------------------------
+// Loading
+
+/** Shows calendars from the offline copy until Drive answers. Ignored once data is loaded. */
+export function loadFromCache(files: CachedFile[]): void {
+  if (state.calendars.length > 0 || state.status === 'ready') return;
+  const calendars: CalendarFile[] = [];
+  for (const file of files) {
+    try {
+      calendars.push(toCalendarFile(file.meta, file.content));
+    } catch {
+      // A broken cached file is simply skipped; Drive will provide a fresh copy.
+    }
+  }
+  setState({ calendars: calendars.sort(byName), fromCache: true });
+}
+
 /**
- * Resolves the folder, then downloads and parses every .ics file in parallel. A file that fails
- * becomes a warning; the others still load. Unsaved changes are discarded.
+ * Resolves the folder, then downloads and parses every .ics file in parallel, always from Drive.
+ * A file that fails becomes a warning; the others still load. Unsaved changes are discarded.
+ * If Drive can't be reached and the offline copy is shown, it stays visible.
  */
 export async function loadCalendars(folderPath: string): Promise<void> {
   const generation = ++loadGeneration;
@@ -103,10 +161,19 @@ export async function loadCalendars(folderPath: string): Promise<void> {
       else warnings.push(`${files[i]?.name ?? 'File'}: ${errorMessage(result.reason)}`);
     });
     if (files.length === 0) warnings.push(`No .ics files found in "${folderPath}".`);
-    setState({ status: 'ready', calendars, warnings });
+    setState({ status: 'ready', calendars, warnings, folderId, fromCache: false, refreshing: [] });
   } catch (err) {
     if (generation !== loadGeneration) return;
-    setState({ status: 'error', error: errorMessage(err), calendars: [] });
+    if (state.fromCache && state.calendars.length > 0) {
+      setState({
+        status: 'ready',
+        warnings: [
+          `Could not reach Google Drive (${errorMessage(err)}). Showing the copy saved on this device.`,
+        ],
+      });
+    } else {
+      setState({ status: 'error', error: errorMessage(err), calendars: [], fromCache: false });
+    }
   }
 }
 
@@ -123,6 +190,23 @@ export async function reloadCalendar(fileId: string): Promise<void> {
   pendingResaves.delete(fileId);
   setState({ calendars: state.calendars.map((c) => (c.fileId === fileId ? fresh : c)) });
   updateSaveStatus();
+}
+
+/**
+ * Refresh button: re-downloads one calendar. Returns whether Drive had a newer version than the
+ * one shown.
+ */
+export async function refreshCalendar(fileId: string): Promise<'updated' | 'unchanged'> {
+  const before = findCalendar(fileId);
+  if (!before) throw new Error('That calendar is no longer loaded.');
+  setState({ refreshing: [...state.refreshing, fileId] });
+  try {
+    await reloadCalendar(fileId);
+    const after = findCalendar(fileId);
+    return after && after.modifiedTime !== before.modifiedTime ? 'updated' : 'unchanged';
+  } finally {
+    setState({ refreshing: state.refreshing.filter((id) => id !== fileId) });
+  }
 }
 
 export function clearCalendars(): void {
@@ -148,6 +232,62 @@ export function eventsInRange(
   return events;
 }
 
+/** Contents for the offline copy, or null while there are unsaved changes or cached data. */
+export function snapshotFiles(): CachedFile[] | null {
+  if (state.status !== 'ready' || state.fromCache) return null;
+  if (state.calendars.some((c) => c.dirty) || runningSaves.size > 0) return null;
+  return state.calendars.map((c) => ({
+    meta: { id: c.fileId, name: c.name, modifiedTime: c.modifiedTime },
+    content: serializeCalendar(c.vcalendar),
+  }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Search
+
+const SEARCH_PAST_MS = 365 * 86_400_000;
+const SEARCH_FUTURE_MS = 2 * 365 * 86_400_000;
+const SEARCH_LIMIT = 100;
+
+/**
+ * Events whose title, location or description contains every word of the query, from a year ago
+ * to two years ahead. A recurring series appears once: its next occurrence (or its last one).
+ */
+export function searchEvents(query: string, now = new Date()): AgendaEvent[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const range = {
+    start: new Date(now.getTime() - SEARCH_PAST_MS),
+    end: new Date(now.getTime() + SEARCH_FUTURE_MS),
+  };
+  const matches = eventsInRange(range, () => true).filter((e) => {
+    const text = [e.title, e.location, e.description].join('\n').toLowerCase();
+    return words.every((w) => text.includes(w));
+  });
+
+  const series = new Map<string, AgendaEvent>();
+  const single: AgendaEvent[] = [];
+  for (const event of matches) {
+    if (!event.recurring) {
+      single.push(event);
+      continue;
+    }
+    const key = `${event.calendarFileId}/${event.uid}`;
+    const best = series.get(key);
+    const isUpcoming = event.end >= now;
+    if (
+      !best ||
+      (isUpcoming && (best.end < now || event.start < best.start)) ||
+      (!isUpcoming && best.end < now && event.start > best.start)
+    ) {
+      series.set(key, event);
+    }
+  }
+  return [...single, ...series.values()]
+    .sort((a, b) => a.start.getTime() - b.start.getTime())
+    .slice(0, SEARCH_LIMIT);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Editing
 
@@ -155,13 +295,6 @@ function requireCalendar(fileId: string): CalendarFile {
   const calendar = findCalendar(fileId);
   if (!calendar) throw new Error('That calendar is no longer loaded.');
   return calendar;
-}
-
-function assertNotRecurring(calendar: CalendarFile, uid: string): void {
-  const vevent = findMasterEvent(calendar.vcalendar, uid);
-  if (vevent && (vevent.hasProperty('rrule') || vevent.hasProperty('rdate'))) {
-    throw new Error('Recurring events cannot be edited yet.');
-  }
 }
 
 /** Applies an edit to one or more calendars, refreshes the view, then saves them. */
@@ -175,6 +308,31 @@ function mutate(calendars: CalendarFile[], apply: () => void): void {
   for (const calendar of calendars) void requestSave(calendar.fileId);
 }
 
+/** An event's current times and fields, in EventDraft format (as edited in the dialog). */
+export function eventToDraft(event: AgendaEvent): EventDraft {
+  const { timeZone } = getSettings();
+  return {
+    title: event.title,
+    allDay: event.allDay,
+    start: event.allDay ? event.startInput : eventInputToIso(event.startInput, timeZone),
+    end: event.allDay ? event.endInput : eventInputToIso(event.endInput, timeZone),
+    location: event.location,
+    description: event.description,
+  };
+}
+
+function occurrenceRef(event: AgendaEvent): OccurrenceRef {
+  const { allDay, start, end } = eventToDraft(event);
+  return { uid: event.uid, recurrenceId: event.recurrenceId!, original: { allDay, start, end } };
+}
+
+/** The repeat rule of the event's series (for the editor). */
+export function ruleOfEvent(event: AgendaEvent): { rule: SimpleRule | null; custom: boolean } {
+  const calendar = findCalendar(event.calendarFileId);
+  if (!calendar) return { rule: null, custom: false };
+  return seriesRule(calendar.vcalendar, event.uid, getSettings().timeZone);
+}
+
 export function addEvent(fileId: string, draft: EventDraft): void {
   const calendar = requireCalendar(fileId);
   mutate([calendar], () => {
@@ -182,31 +340,109 @@ export function addEvent(fileId: string, draft: EventDraft): void {
   });
 }
 
-/** Updates an event; when `targetFileId` differs, moves it to that calendar. */
-export function editEvent(
-  fileId: string,
-  uid: string,
-  draft: EventDraft,
-  targetFileId: string = fileId,
-): void {
-  const source = requireCalendar(fileId);
-  assertNotRecurring(source, uid);
-  const timeZone = getSettings().timeZone;
-  if (targetFileId === fileId) {
-    mutate([source], () => updateEvent(source.vcalendar, uid, draft, timeZone));
-    return;
-  }
-  const target = requireCalendar(targetFileId);
-  mutate([source, target], () =>
-    moveEvent(source.vcalendar, target.vcalendar, uid, draft, timeZone),
-  );
+export interface EditOptions {
+  /** For occurrences of a series: which occurrences the edit applies to (default: all). */
+  scope?: EditScope;
+  /** Moves the event (the whole series for recurring events) to another calendar. */
+  targetFileId?: string;
 }
 
-export function deleteEvent(fileId: string, uid: string): void {
-  const calendar = requireCalendar(fileId);
-  assertNotRecurring(calendar, uid);
+export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOptions = {}): void {
+  const source = requireCalendar(event.calendarFileId);
+  const target = requireCalendar(options.targetFileId ?? source.fileId);
+  const timeZone = getSettings().timeZone;
+  const moving = target !== source;
+
+  // A plain, non-recurring event.
+  if (!event.recurrenceId) {
+    if (!moving) mutate([source], () => updateEvent(source.vcalendar, event.uid, draft, timeZone));
+    else {
+      mutate([source, target], () =>
+        moveEvent(source.vcalendar, target.vcalendar, event.uid, draft, timeZone),
+      );
+    }
+    return;
+  }
+
+  const ref = occurrenceRef(event);
+  // An override whose series isn't in the file: edit it on its own.
+  if (!event.recurring) {
+    if (moving) throw new Error('This event can only be edited in its own calendar.');
+    mutate([source], () =>
+      editOccurrence(source.vcalendar, ref, { ...draft, rrule: undefined }, timeZone),
+    );
+    return;
+  }
+
+  const scope = options.scope ?? 'all';
+  if (moving) {
+    if (scope !== 'all') throw new Error('Only the whole series can move to another calendar.');
+    mutate([source, target], () => {
+      moveComponents(source.vcalendar, target.vcalendar, event.uid);
+      editSeries(target.vcalendar, ref, draft, timeZone);
+    });
+    return;
+  }
+  mutate([source], () => {
+    if (scope === 'this') {
+      editOccurrence(source.vcalendar, ref, { ...draft, rrule: undefined }, timeZone);
+    } else if (scope === 'following') {
+      editFollowing(source.vcalendar, ref, draft, timeZone);
+    } else {
+      editSeries(source.vcalendar, ref, draft, timeZone);
+    }
+  });
+}
+
+export function deleteEvent(event: AgendaEvent, scope: EditScope = 'all'): void {
+  const calendar = requireCalendar(event.calendarFileId);
   mutate([calendar], () => {
-    removeEvent(calendar.vcalendar, uid);
+    if (!event.recurrenceId) removeEvent(calendar.vcalendar, event.uid);
+    else if (!event.recurring || scope === 'this') {
+      deleteOccurrence(calendar.vcalendar, occurrenceRef(event));
+    } else if (scope === 'following') {
+      deleteFollowing(calendar.vcalendar, occurrenceRef(event));
+    } else removeEvent(calendar.vcalendar, event.uid);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Calendars
+
+/** "Work: Q1/Q2" → "Work- Q1-Q2.ics", unique within the folder. */
+function fileNameFor(name: string): string {
+  const base = name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Calendar';
+  const taken = new Set(state.calendars.map((c) => c.name.toLowerCase()));
+  let candidate = `${base}.ics`;
+  for (let i = 2; taken.has(candidate.toLowerCase()); i++) candidate = `${base} (${i}).ics`;
+  return candidate;
+}
+
+/** Creates a new, empty .ics file in the folder and returns its file ID. */
+export async function createCalendar(name: string): Promise<string> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Please enter a name.');
+  if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
+  const generation = loadGeneration;
+  const content = serializeCalendar(newCalendarComponent(trimmed));
+  const meta: DriveFileMeta = await createFile(state.folderId, fileNameFor(trimmed), content);
+  if (generation !== loadGeneration) return meta.id;
+  const calendar = toCalendarFile(meta, content);
+  setState({
+    calendars: [...state.calendars, calendar].sort(byName),
+    warnings: state.warnings.filter((w) => !w.startsWith('No .ics files')),
+  });
+  return meta.id;
+}
+
+/** Renames a calendar (its X-WR-CALNAME; the file name on Drive stays the same). */
+export function renameCalendar(fileId: string, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Please enter a name.');
+  const calendar = requireCalendar(fileId);
+  mutate([calendar], () => {
+    renameCalendarComponent(calendar.vcalendar, trimmed);
+    calendar.displayName = trimmed;
   });
 }
 
@@ -289,6 +525,10 @@ export function retrySaves(): void {
 
 export function hasUnsavedChanges(): boolean {
   return runningSaves.size > 0 || state.calendars.some((c) => c.dirty);
+}
+
+export function isCalendarDirty(fileId: string): boolean {
+  return findCalendar(fileId)?.dirty ?? false;
 }
 
 /** Called when a save finds the file changed on Drive; must return the user's decision. */

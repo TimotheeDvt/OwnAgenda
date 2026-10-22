@@ -1,5 +1,5 @@
 import { DRIVE_API, DRIVE_UPLOAD_API, SETTINGS_FILE_NAME } from '../config';
-import { buildUrl, driveFetch, driveJson } from './driveClient';
+import { buildUrl, createWithContent, driveFetch, driveJson } from './driveClient';
 
 let settingsFileId: string | null = null;
 
@@ -42,23 +42,10 @@ export async function writeSettings(settings: unknown): Promise<void> {
     return;
   }
 
-  const boundary = `ics-agenda-${crypto.randomUUID()}`;
-  const metadata = {
-    name: SETTINGS_FILE_NAME,
-    parents: ['appDataFolder'],
-    mimeType: 'application/json',
-  };
-  const multipart =
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
-    `${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
-  const created = await driveJson<{ id: string }>(
-    buildUrl(`${DRIVE_UPLOAD_API}/files`, { uploadType: 'multipart', fields: 'id' }),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-      body: multipart,
-    },
+  const created = await createWithContent<{ id: string }>(
+    { name: SETTINGS_FILE_NAME, parents: ['appDataFolder'], mimeType: 'application/json' },
+    body,
+    'id',
   );
   settingsFileId = created.id;
 }

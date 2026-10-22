@@ -1,4 +1,5 @@
 import { getAccessToken, refreshAccessToken } from '../auth/auth';
+import { DRIVE_UPLOAD_API } from '../config';
 
 export class DriveError extends Error {
   override name = 'DriveError';
@@ -50,4 +51,23 @@ export async function driveFetch(url: string, init: RequestInit = {}): Promise<R
 export async function driveJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await driveFetch(url, init);
   return (await res.json()) as T;
+}
+
+/** Creates a file with metadata and content in one multipart upload. */
+export function createWithContent<T>(
+  metadata: { name: string; parents: string[]; mimeType: string },
+  content: string,
+  fields: string,
+): Promise<T> {
+  const boundary = `ics-agenda-${crypto.randomUUID()}`;
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    `${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: ${metadata.mimeType}; charset=UTF-8\r\n\r\n` +
+    `${content}\r\n--${boundary}--`;
+  return driveJson<T>(buildUrl(`${DRIVE_UPLOAD_API}/files`, { uploadType: 'multipart', fields }), {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body,
+  });
 }

@@ -412,26 +412,6 @@ code {
   cursor: pointer;
 }
 
-/* Small screens: stack the sidebar above the calendar (full mobile layout is Phase 4). */
-
-@media (max-width: 720px) {
-  .app-body {
-    flex-direction: column;
-  }
-
-  .sidebar {
-    width: auto;
-    max-height: 35vh;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .calendar-host {
-    padding: 8px;
-    min-height: 60vh;
-  }
-}
-
 /* Header controls */
 
 .header-actions {
@@ -609,4 +589,405 @@ code {
 .btn-danger-solid:hover:not(:disabled) {
   background: var(--danger);
   filter: brightness(1.1);
+}
+
+/* Small buttons */
+
+.icon-btn {
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  flex: none;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn.is-spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.is-spinning {
+    animation: none;
+  }
+}
+
+.link-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-top: 10px;
+  border: none;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* Calendar list tools */
+
+.calendar-label {
+  flex: 1;
+}
+
+.calendar-tools {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Tools appear on hover/focus where hovering exists; always visible on touch screens. */
+@media (hover: hover) {
+  .calendar-item .calendar-tools .icon-btn:not(.is-spinning) {
+    opacity: 0;
+  }
+
+  .calendar-item:hover .calendar-tools .icon-btn:not(:disabled),
+  .calendar-item:focus-within .calendar-tools .icon-btn:not(:disabled) {
+    opacity: 1;
+  }
+}
+
+.calendar-name.is-dirty::after {
+  content: ' •';
+  color: var(--warning);
+}
+
+.new-calendar {
+  margin-top: 8px;
+}
+
+.option-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Search */
+
+.search-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.search-summary {
+  margin: 8px 0 4px;
+  font-size: 0.8rem;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.search-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result:hover,
+.search-result:focus-visible {
+  background: var(--surface-hover);
+}
+
+.search-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.search-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.search-title {
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Repeat editor */
+
+.event-form .repeat-options {
+  display: none;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.event-form.repeating .repeat-options {
+  display: grid;
+}
+
+.event-form .inline-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.event-form .inline-field input[type='number'] {
+  width: 5.5em;
+}
+
+.event-form .weekdays {
+  display: none;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.event-form.weekly .weekdays {
+  display: flex;
+}
+
+.event-form .weekday {
+  position: relative;
+  font-size: 0.8rem;
+}
+
+.event-form .weekday input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+
+.event-form .weekday span {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.event-form .weekday input:checked + span {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.event-form .weekday input:focus-visible + span {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.event-form [name='until'],
+.event-form [name='count'],
+.event-form .count-unit {
+  display: none;
+}
+
+.event-form.ends-until [name='until'],
+.event-form.ends-count [name='count'],
+.event-form.ends-count .count-unit {
+  display: inline-block;
+}
+
+/* Repeating events get a small marker in the calendar. */
+
+.calendar-host .fc .is-recurring .fc-event-title::after {
+  content: ' ↻';
+  opacity: 0.75;
+}
+
+/* Keyboard shortcuts dialog */
+
+.shortcut-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.shortcut-list dt {
+  display: flex;
+  gap: 4px;
+}
+
+.shortcut-list dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+kbd {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+/* Mobile layout: the sidebar becomes a drawer opened from the header menu button. */
+
+.menu-btn {
+  display: none;
+  font-size: 1.2rem;
+  width: 34px;
+  height: 34px;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --header-height: 52px;
+  }
+
+  .app-header {
+    padding: 0 8px;
+    gap: 8px;
+  }
+
+  .menu-btn:not([hidden]) {
+    display: inline-flex;
+  }
+
+  .app-title {
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .user-name,
+  .avatar {
+    display: none;
+  }
+
+  .theme-select {
+    max-width: 92px;
+  }
+
+  .save-status {
+    font-size: 0.75rem;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--header-height);
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(320px, 85vw);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow);
+  }
+
+  body.sidebar-open .sidebar {
+    transform: none;
+  }
+
+  body.sidebar-open .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--header-height) 0 0 0;
+    z-index: 30;
+    background: var(--backdrop);
+  }
+
+  .calendar-host {
+    padding: 6px;
+  }
+
+  .calendar-host .fc .fc-toolbar {
+    gap: 6px;
+  }
+
+  .calendar-host .fc .fc-toolbar-title {
+    font-size: 1rem;
+  }
+
+  .calendar-host .fc .fc-button {
+    padding: 0.3em 0.55em;
+    font-size: 0.85rem;
+  }
+
+  .event-dialog,
+  .folder-dialog {
+    padding: 16px;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .event-form .datetime-row {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) and (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }

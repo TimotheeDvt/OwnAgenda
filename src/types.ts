@@ -23,7 +23,13 @@ export interface AgendaEvent {
   allDay: boolean;
   location?: string;
   description?: string;
+  /** True for occurrences of a series (RRULE/RDATE), including overridden ones. */
   recurring: boolean;
+  /**
+   * RECURRENCE-ID of this occurrence: set for occurrences of a series and for overrides whose
+   * series is missing from the file.
+   */
+  recurrenceId?: ICAL.Time;
   /**
    * Start/end as FullCalendar inputs: "YYYY-MM-DD" for all-day, an ISO instant with "Z" for
    * zoned times, or a local "YYYY-MM-DDTHH:mm:ss" for floating times (shown as wall-clock time

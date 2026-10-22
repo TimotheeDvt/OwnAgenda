@@ -1,5 +1,5 @@
 import { DRIVE_API, DRIVE_UPLOAD_API } from '../config';
-import { buildUrl, driveFetch, driveJson } from './driveClient';
+import { buildUrl, createWithContent, driveFetch, driveJson } from './driveClient';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
@@ -116,6 +116,19 @@ export function uploadFile(fileId: string, content: string): Promise<DriveFileMe
       headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
       body: content,
     },
+  );
+}
+
+/** Creates a new .ics file in the folder and returns its metadata. */
+export function createFile(
+  folderId: string,
+  name: string,
+  content: string,
+): Promise<DriveFileMeta> {
+  return createWithContent<DriveFileMeta>(
+    { name, parents: [folderId], mimeType: 'text/calendar' },
+    content,
+    'id,name,modifiedTime,mimeType',
   );
 }
 

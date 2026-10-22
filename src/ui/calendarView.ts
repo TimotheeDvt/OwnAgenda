@@ -1,4 +1,4 @@
-import { Calendar, type EventApi, type EventInput } from '@fullcalendar/core';
+import { Calendar, type EventApi, type EventInput, type ToolbarInput } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
@@ -22,8 +22,26 @@ import { changeEventTimes, createEventAt, openEvent, type EventTimes } from './e
 import intlTimeZonePlugin from './timeZonePlugin';
 
 export interface CalendarView {
+  today(): void;
+  prev(): void;
+  next(): void;
+  changeView(view: ViewName): void;
+  /** Navigates to the date of an event (e.g. a search result). */
+  showEvent(event: AgendaEvent): void;
   destroy(): void;
 }
+
+/** Below this width the toolbar is split in two rows (Phase 4 mobile layout). */
+export const NARROW_QUERY = '(max-width: 720px)';
+
+const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
+  header: { left: 'prev,next today', center: 'title', right: VIEW_NAMES.join(',') },
+  footer: false,
+};
+const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
+  header: { left: 'prev,next', center: 'title', right: 'today' },
+  footer: { center: VIEW_NAMES.join(',') },
+};
 
 function toEventInput(event: AgendaEvent): EventInput {
   const { color } = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
@@ -34,14 +52,18 @@ function toEventInput(event: AgendaEvent): EventInput {
     end: event.endInput,
     allDay: event.allDay,
     color,
-    // Recurring events become editable in a later phase.
-    editable: !event.recurring,
+    classNames: event.recurring ? ['is-recurring'] : [],
     extendedProps: { agendaEvent: event },
   };
 }
 
 function tooltip(event: AgendaEvent): string {
-  return [event.title || '(No title)', event.location, event.description]
+  return [
+    event.title || '(No title)',
+    event.recurring ? '↻ Repeating event' : '',
+    event.location,
+    event.description,
+  ]
     .filter(Boolean)
     .join('\n');
 }
@@ -60,16 +82,16 @@ function timesOf(event: EventApi): EventTimes | null {
 
 export function mountCalendarView(host: HTMLElement): CalendarView {
   const initial = getSettings();
+  const narrow = window.matchMedia(NARROW_QUERY);
+  const toolbar = () => (narrow.matches ? NARROW_TOOLBAR : WIDE_TOOLBAR);
+
   const calendar = new Calendar(host, {
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, intlTimeZonePlugin],
     initialView: initial.defaultView,
     firstDay: initial.weekStartsOn,
     timeZone: initial.timeZone,
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: VIEW_NAMES.join(','),
-    },
+    headerToolbar: toolbar().header,
+    footerToolbar: toolbar().footer,
     buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
     height: '100%',
     nowIndicator: true,
@@ -77,6 +99,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     editable: true,
     selectable: true,
     selectMirror: true,
+    // Long-press to drag on touch screens, short enough to feel responsive.
+    longPressDelay: 400,
     forceEventDuration: true,
     select: (info) => {
       calendar.unselect();
@@ -94,7 +118,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     eventChange: (info) => {
       const agendaEvent = agendaEventOf(info.event);
       const times = timesOf(info.event);
-      if (!agendaEvent || !times || !changeEventTimes(agendaEvent, times)) info.revert();
+      if (!agendaEvent || !times) {
+        info.revert();
+        return;
+      }
+      void changeEventTimes(agendaEvent, times).then((ok) => {
+        if (!ok) info.revert();
+      });
     },
     events: (info, success) => {
       const events = eventsInRange(
@@ -116,6 +146,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   });
   calendar.render();
 
+  const onResize = () => {
+    calendar.setOption('headerToolbar', toolbar().header);
+    calendar.setOption('footerToolbar', toolbar().footer);
+  };
+  narrow.addEventListener('change', onResize);
+
   let last = initial;
   const offSettings = onSettingsChange((s) => {
     if (s.timeZone !== last.timeZone) calendar.setOption('timeZone', s.timeZone);
@@ -133,7 +169,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   });
 
   return {
+    today: () => calendar.today(),
+    prev: () => calendar.prev(),
+    next: () => calendar.next(),
+    changeView: (view) => calendar.changeView(view),
+    showEvent: (event) => calendar.gotoDate(event.startInput),
     destroy() {
+      narrow.removeEventListener('change', onResize);
       offSettings();
       offCalendars();
       calendar.destroy();
