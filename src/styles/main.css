@@ -1456,3 +1456,22 @@ kbd {
 .calendar-option.is-selected .calendar-dot {
   box-shadow: 0 0 0 2px #fff;
 }
+
+/* Show/hide eye: one of the row's hover tools (with rename and refresh). Hidden calendars stay
+   dimmed so they can be told apart without hovering. */
+
+.visibility-toggle svg {
+  /* Don't let the button squeeze the icon smaller than its size. */
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.calendar-item.is-hidden .calendar-name,
+.calendar-item.is-hidden .calendar-color {
+  opacity: 0.5;
+}
+
+.calendar-label {
+  cursor: default;
+}

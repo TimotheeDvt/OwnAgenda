@@ -215,13 +215,15 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     });
     handle.addEventListener('pointerdown', (e) => startDrag(e, handle, list, orderedIds));
 
-    const visible = el('input');
-    visible.type = 'checkbox';
-    visible.checked = settings.visible;
-    visible.setAttribute('aria-label', `Show ${calendar.displayName}`);
-    visible.addEventListener('change', () =>
-      updateCalendarSettings(calendar.fileId, index, { visible: visible.checked }),
+    // Eye toggle: open = shown in the calendar, closed = hidden.
+    const visible = iconButton(
+      settings.visible ? 'eye' : 'eyeOff',
+      `${settings.visible ? 'Hide' : 'Show'} ${calendar.displayName}`,
+      () => updateCalendarSettings(calendar.fileId, index, { visible: !settings.visible }),
     );
+    visible.classList.add('visibility-toggle');
+    visible.setAttribute('aria-pressed', String(settings.visible));
+    if (!settings.visible) item.classList.add('is-hidden');
 
     const color = el('input', 'calendar-color');
     color.type = 'color';
@@ -236,8 +238,8 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     name.title = `${calendar.name}${calendar.dirty ? ' (unsaved changes)' : ''}`;
     if (calendar.dirty) name.classList.add('is-dirty');
 
-    const label = el('label', 'calendar-label');
-    label.append(visible, name);
+    const label = el('span', 'calendar-label');
+    label.append(name);
     if (subscription) {
       const host = hostOf(subscription.url);
       const badge = el('span', 'subscription-badge');
@@ -265,7 +267,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     );
 
     const tools = el('span', 'calendar-tools');
-    tools.append(rename, refresh);
+    tools.append(visible, rename, refresh);
     item.append(handle, color, label, tools);
     list.appendChild(item);
   });
