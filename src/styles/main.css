@@ -118,6 +118,7 @@ code {
 }
 
 .app-header {
+  position: relative;
   height: var(--header-height);
   flex: none;
   display: flex;
@@ -132,6 +133,62 @@ code {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
+}
+
+/* "Now" bubble (see currentEvent.ts), centered above the calendar's toolbar title: app.ts sets
+   --now-x (and max-width so it never covers the title or the controls). Computer only: hidden on
+   narrow screens below. */
+.header-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--now-x, 50%);
+  transform: translateX(-50%);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.current-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(100%, 480px);
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.current-event:hover {
+  background: var(--surface-hover);
+}
+
+.current-event-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.current-event-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.current-event-until,
+.current-event-more {
+  flex: none;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .header-user {
@@ -972,6 +1029,10 @@ kbd {
   .app-title {
     font-size: 1rem;
     white-space: nowrap;
+  }
+
+  .header-now {
+    display: none;
   }
 
   .header-actions {

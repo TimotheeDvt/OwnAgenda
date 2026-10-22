@@ -52,6 +52,7 @@ import {
 import type { AgendaEvent } from '../types';
 import { mountCalendarView, type CalendarView } from './calendarView';
 import { chooseOption } from './choiceDialog';
+import { mountCurrentEvent } from './currentEvent';
 import { createEventNow, openEvent, redoLastChange, undoLastChange } from './eventActions';
 import { ICONS, statusIcon } from './icons';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
@@ -64,6 +65,7 @@ import { showToast } from './toast';
 interface Layout {
   menu: HTMLButtonElement;
   saveStatus: HTMLElement;
+  now: HTMLElement;
   theme: HTMLButtonElement;
   user: HTMLElement;
   sidebar: HTMLElement;
@@ -92,6 +94,7 @@ function renderLayout(root: HTMLElement): Layout {
     <header class="app-header">
       <button type="button" class="icon-btn menu-btn" aria-label="Show calendars" hidden>☰</button>
       <h1 class="app-title">ICS Agenda</h1>
+      <div class="header-now"></div>
       <div class="header-actions">
         <div class="save-status" aria-live="polite"></div>
         <button class="theme-switch"></button>
@@ -107,6 +110,7 @@ function renderLayout(root: HTMLElement): Layout {
   return {
     menu: root.querySelector('.menu-btn')!,
     saveStatus: root.querySelector('.save-status')!,
+    now: root.querySelector('.header-now')!,
     theme: root.querySelector('.theme-switch')!,
     user: root.querySelector('.header-user')!,
     sidebar: root.querySelector('.sidebar')!,
@@ -210,6 +214,49 @@ function renderSaveStatus(state: CalendarState): void {
     nodes.push(button('Retry', 'btn btn-small', retrySaves));
   }
   el.replaceChildren(...nodes);
+}
+
+const NOW_BUBBLE_MAX_WIDTH = 480;
+const NOW_BUBBLE_GAP = 16;
+
+/**
+ * Keeps the "now" bubble centered above the calendar's toolbar title, which moves with the
+ * sidebar width and the title's text, and narrows it so it never covers the header's title or
+ * controls.
+ */
+function setupNowBubbleAlignment(): void {
+  let frame = 0;
+  const align = () => {
+    frame = 0;
+    const title = layout.main.querySelector('.fc-toolbar-title');
+    const header = layout.now.parentElement;
+    if (!title || !header || !title.getClientRects().length) {
+      layout.now.style.removeProperty('--now-x');
+      layout.now.style.removeProperty('max-width');
+      return;
+    }
+    const headerBox = header.getBoundingClientRect();
+    const titleBox = title.getBoundingClientRect();
+    const x = titleBox.left + titleBox.width / 2;
+    const left =
+      header.querySelector('.app-title')?.getBoundingClientRect().right ?? headerBox.left;
+    const right =
+      header.querySelector('.header-actions')?.getBoundingClientRect().left ?? headerBox.right;
+    const room = 2 * Math.min(x - left, right - x) - 2 * NOW_BUBBLE_GAP;
+    layout.now.style.setProperty('--now-x', `${x - headerBox.left}px`);
+    layout.now.style.maxWidth = `${Math.max(0, Math.min(room, NOW_BUBBLE_MAX_WIDTH))}px`;
+  };
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(align);
+  };
+  // Window / sidebar resizes, and the title's text changing (navigating, switching views).
+  new ResizeObserver(schedule).observe(layout.main);
+  new MutationObserver(schedule).observe(layout.main, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  window.addEventListener('resize', schedule);
 }
 
 function setTheme(theme: Theme): void {
@@ -754,6 +801,11 @@ export async function startApp(root: HTMLElement): Promise<void> {
   const theme = cachedTheme();
   applyTheme(theme);
   mountThemeSwitch(layout.theme, setTheme);
+  mountCurrentEvent(layout.now, (event) => {
+    calendarView?.showEvent(event);
+    void openEvent(event);
+  });
+  setupNowBubbleAlignment();
   layout.menu.addEventListener('click', () =>
     setDrawer(!document.body.classList.contains('sidebar-open')),
   );
