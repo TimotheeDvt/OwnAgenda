@@ -3,7 +3,13 @@ import { storage } from '../storage';
 import { readableTextColor } from '../util/color';
 import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
-export const VIEW_NAMES = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'] as const;
+export const VIEW_NAMES = [
+  'dayGridMonth',
+  'timeGridWeek',
+  'timeGrid3Day',
+  'timeGridDay',
+  'listWeek',
+] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
 export type Theme = 'system' | 'light' | 'dark';
 

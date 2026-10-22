@@ -38,6 +38,7 @@ import {
   type EventTimes,
 } from './eventActions';
 import { captureToClipboard } from './captureView';
+import { openViewMenu } from './viewMenu';
 import intlTimeZonePlugin from './timeZonePlugin';
 
 export interface CalendarView {
@@ -55,19 +56,31 @@ export interface CalendarView {
 /** Below this width the toolbar is split in two rows (Phase 4 mobile layout). */
 export const NARROW_QUERY = '(max-width: 720px)';
 
+/** One button per view on computers; phones get every view (3 days too) in a menu. */
+const WIDE_VIEW_BUTTONS: ViewName[] = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'];
+
+/** Menu labels, and the short names used in the URL. */
+const VIEWS: Record<ViewName, { label: string; url: string }> = {
+  dayGridMonth: { label: 'Month', url: 'month' },
+  timeGridWeek: { label: 'Week', url: 'week' },
+  timeGrid3Day: { label: '3 days', url: '3days' },
+  timeGridDay: { label: 'Day', url: 'day' },
+  listWeek: { label: 'List', url: 'list' },
+};
+
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   // 'capture' (camera) sits just left of the view buttons.
   header: {
     left: 'today prev,next undo,redo',
     center: 'title',
-    right: `capture ${VIEW_NAMES.join(',')}`,
+    right: `capture ${WIDE_VIEW_BUTTONS.join(',')}`,
   },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: { left: 'today prev,next', center: 'title', right: '' },
-  // Undo/redo at the bottom, within reach of the thumb.
-  footer: { center: `undo,redo capture ${VIEW_NAMES.join(',')}` },
+  // Undo/redo at the bottom, within reach of the thumb; the views in a menu (see openViewMenu).
+  footer: { center: 'undo,redo capture viewMenu' },
 };
 
 // 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
@@ -158,21 +171,13 @@ function placeIcon(el: HTMLElement, icon: string | undefined, textColor?: string
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Short view names used in the URL. */
-const URL_VIEW_NAMES: Record<ViewName, string> = {
-  dayGridMonth: 'month',
-  timeGridWeek: 'week',
-  timeGridDay: 'day',
-  listWeek: 'list',
-};
-
 /** The view and date kept in the URL (?view=week&date=YYYY-MM-DD), so a reload stays there. */
 function readUrlPosition(): { view?: ViewName; date?: string } {
   const params = new URLSearchParams(window.location.search);
   const name = params.get('view');
   const date = params.get('date');
   return {
-    view: VIEW_NAMES.find((v) => URL_VIEW_NAMES[v] === name),
+    view: VIEW_NAMES.find((v) => VIEWS[v].url === name),
     date: date && ISO_DATE.test(date) && !Number.isNaN(Date.parse(date)) ? date : undefined,
   };
 }
@@ -180,7 +185,7 @@ function readUrlPosition(): { view?: ViewName; date?: string } {
 /** Updates the URL in place (no new history entry for every period browsed). */
 function writeUrlPosition(view: ViewName, date: string): void {
   const url = new URL(window.location.href);
-  url.searchParams.set('view', URL_VIEW_NAMES[view]);
+  url.searchParams.set('view', VIEWS[view].url);
   url.searchParams.set('date', date);
   if (url.href !== window.location.href) window.history.replaceState(null, '', url);
 }
@@ -300,7 +305,19 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       // Arrow icons (CSS); disabled when there is nothing to undo/redo (see updateHistoryButtons).
       undo: { text: '', hint: 'Undo', click: () => undoLastChange() },
       redo: { text: '', hint: 'Redo', click: () => redoLastChange() },
+      // Phones: the current view's name, opening the list of views (see syncViewMenuButton).
+      viewMenu: {
+        text: 'View',
+        hint: 'Change view',
+        click: (e) =>
+          openViewMenu(e.currentTarget as HTMLElement, {
+            current: calendar.view.type,
+            views: VIEW_NAMES.map((view) => ({ view, label: VIEWS[view].label })),
+            onPick: (view) => calendar.changeView(view),
+          }),
+      },
     },
+    views: { timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } } },
     // No label next to the all-day row.
     allDayText: '',
     dayHeaderContent,
@@ -381,6 +398,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
     datesSet: (arg) => {
       updateHistoryButtons();
+      syncViewMenuButton();
       const view = arg.view.type as ViewName;
       // Same dates in another view reuse the loaded events; reload so the list view can leave
       // out past events (and other views show them again).
@@ -396,6 +414,15 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
   });
   calendar.render();
+
+  /** The phone view menu button shows the current view's name (and ▾). */
+  function syncViewMenuButton(): void {
+    const btn = host.querySelector<HTMLButtonElement>('.fc-viewMenu-button');
+    if (!btn) return;
+    const view = calendar.view.type as ViewName;
+    btn.textContent = `${VIEWS[view]?.label ?? 'View'} ▾`;
+    btn.setAttribute('aria-haspopup', 'menu');
+  }
 
   /** Enables undo/redo only when there is something to undo/redo and changes can be saved. */
   function updateHistoryButtons(): void {
@@ -434,6 +461,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     calendar.setOption('slotLabelFormat', slotLabelFormat());
     // The toolbars were rebuilt.
     updateHistoryButtons();
+    syncViewMenuButton();
   };
   narrow.addEventListener('change', onResize);
 
