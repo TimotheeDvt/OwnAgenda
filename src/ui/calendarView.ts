@@ -58,14 +58,14 @@ export const NARROW_QUERY = '(max-width: 720px)';
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   // 'capture' (camera) sits just left of the view buttons.
   header: {
-    left: 'prev,next today undo,redo',
+    left: 'today prev,next undo,redo',
     center: 'title',
     right: `capture ${VIEW_NAMES.join(',')}`,
   },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
-  header: { left: 'prev,next', center: 'title', right: 'today' },
+  header: { left: 'today prev,next', center: 'title', right: '' },
   // Undo/redo at the bottom, within reach of the thumb.
   footer: { center: `undo,redo capture ${VIEW_NAMES.join(',')}` },
 };
