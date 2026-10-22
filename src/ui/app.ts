@@ -16,6 +16,11 @@ import {
   retrySaves,
   setConflictHandler,
   setSaveErrorHandler,
+  setSubscriptionErrorHandler,
+  subscribeCalendar,
+  subscriptionOf,
+  syncStaleSubscriptions,
+  syncSubscription,
   snapshotFiles,
   type CalendarState,
 } from '../store/calendarStore';
@@ -38,7 +43,7 @@ import { chooseOption } from './choiceDialog';
 import { createEventNow, openEvent } from './eventActions';
 import { installShortcuts, showShortcutsHelp } from './shortcuts';
 import { mountSidebar, type Sidebar } from './sidebar';
-import { promptFolderPath, promptText } from './textPrompt';
+import { promptFolderPath, promptForm, promptText } from './textPrompt';
 import { applyTheme, cachedTheme } from './theme';
 import { showToast } from './toast';
 
@@ -250,6 +255,16 @@ async function reloadAll(): Promise<void> {
 async function refreshOne(fileId: string): Promise<void> {
   const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
   if (!calendar) return;
+  // Subscribed calendar: download it again from its online source right now.
+  if (subscriptionOf(fileId)) {
+    try {
+      await syncSubscription(fileId, { force: true });
+      showToast(`"${calendar.displayName}" was updated from its online calendar.`, 'success');
+    } catch (err) {
+      showToast(`Could not update "${calendar.displayName}": ${errorMessage(err)}`, 'error');
+    }
+    return;
+  }
   if (!(await confirmDiscard(`Refresh "${calendar.displayName}"`, isCalendarDirty(fileId)))) {
     return;
   }
@@ -264,6 +279,53 @@ async function refreshOne(fileId: string): Promise<void> {
   } catch (err) {
     showToast(`Could not refresh "${calendar.displayName}": ${errorMessage(err)}`, 'error');
   }
+}
+
+async function subscribe(): Promise<void> {
+  const values = await promptForm({
+    title: 'Subscribe to an online calendar',
+    descriptionHtml:
+      "Paste the calendar's <code>.ics</code> link (for AMU: in ADE, open your timetable, " +
+      "click <em>Export</em> / <em>Exporter l'agenda</em> and copy the generated URL). " +
+      'A copy is saved as a new <code>.ics</code> file in your folder and updated every day. ' +
+      'Its events are read-only.',
+    fields: [
+      { name: 'name', label: 'Name', placeholder: 'AMU lessons' },
+      { name: 'url', label: 'Calendar link', type: 'url', placeholder: 'https://… or webcal://…' },
+    ],
+    submitLabel: 'Subscribe',
+  });
+  if (!values?.name || !values.url) return;
+  try {
+    await subscribeCalendar(values.name, values.url);
+    showToast(`Subscribed to "${values.name}".`, 'success');
+  } catch (err) {
+    showToast(`Could not subscribe: ${errorMessage(err)}`, 'error');
+  }
+}
+
+async function setCorsProxy(): Promise<void> {
+  const values = await promptForm({
+    title: 'CORS proxy for subscriptions',
+    descriptionHtml:
+      'Some calendar servers refuse downloads from a web page. A CORS proxy fetches the ' +
+      'calendar for the app. Use <code>{url}</code> where the calendar link goes, e.g. ' +
+      '<code>https://my-proxy.example.workers.dev/?url={url}</code>. ' +
+      '<strong>The proxy sees your calendar link and its contents</strong>, so use one you ' +
+      'trust (ideally your own). Leave empty to download directly.',
+    fields: [
+      {
+        name: 'proxy',
+        label: 'Proxy URL',
+        type: 'url',
+        value: getSettings().corsProxy,
+        placeholder: 'https://…/?url={url}',
+        optional: true,
+      },
+    ],
+  });
+  if (!values) return;
+  updateSettings({ corsProxy: values.proxy ?? '' });
 }
 
 async function newCalendar(): Promise<void> {
@@ -362,6 +424,8 @@ function mountMain(): void {
     onRefreshCalendar: (fileId) => void refreshOne(fileId),
     onRenameCalendar: (fileId) => void renameOne(fileId),
     onNewCalendar: () => void newCalendar(),
+    onSubscribe: () => void subscribe(),
+    onSetCorsProxy: () => void setCorsProxy(),
     onPickSearchResult: pickSearchResult,
     onToggleOfflineCache: (enabled) => void toggleOfflineCache(enabled),
     onShowShortcuts: showShortcutsHelp,
@@ -443,6 +507,19 @@ function setupSaving(): void {
       ],
     );
     return choice ?? 'later';
+  });
+  setSubscriptionErrorHandler((calendar, message) =>
+    showToast(
+      `Could not update "${calendar.displayName}" from its online calendar: ${message}`,
+      'warning',
+      10_000,
+    ),
+  );
+  // Subscriptions are checked when calendars load, and again whenever the tab becomes visible
+  // (switching back to it, waking the computer): that's when fresh data matters.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (isSignedIn() && getCalendarState().status === 'ready') void syncStaleSubscriptions();
   });
   setSaveErrorHandler((calendar, message) =>
     showToast(`Could not save "${calendar.displayName}": ${message}`, 'error'),

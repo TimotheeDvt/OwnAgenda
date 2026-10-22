@@ -1051,3 +1051,27 @@ kbd {
   background-position: top left;
   background-repeat: no-repeat;
 }
+
+/* Subscriptions */
+
+.subscription-badge {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+.subscription-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.calendar-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.prompt-field + .prompt-field {
+  margin-top: 12px;
+}

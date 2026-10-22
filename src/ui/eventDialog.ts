@@ -25,6 +25,8 @@ export interface EventDialogOptions {
   rule?: { rule: SimpleRule | null; custom: boolean };
   /** Editing one occurrence of a series: the caller asks which occurrences a change applies to. */
   occurrence?: boolean;
+  /** Show the event without editing (e.g. events of a subscribed calendar), with this note. */
+  readOnlyNote?: string;
 }
 
 /** `draft.rrule` is undefined when the repeat settings were not changed. */
@@ -100,6 +102,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     dialog.innerHTML = `
       <form class="event-form" novalidate>
         <h2 id="${id}-title"></h2>
+        <p class="readonly-note" hidden></p>
         <label class="field">Title
           <input name="title" class="title-input" type="text" autocomplete="off" />
         </label>
@@ -185,7 +188,9 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     const deleteBtn = form.querySelector<HTMLButtonElement>('[data-action="delete"]')!;
     const cancelBtn = form.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
 
-    dialog.querySelector('h2')!.textContent = mode === 'create' ? 'New event' : 'Edit event';
+    const readOnly = options.readOnlyNote !== undefined;
+    dialog.querySelector('h2')!.textContent =
+      mode === 'create' ? 'New event' : readOnly ? 'Event' : 'Edit event';
 
     for (const cal of calendars) {
       const option = document.createElement('option');
@@ -272,7 +277,17 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     startDate.addEventListener('change', shiftEnd);
     startTime.addEventListener('change', shiftEnd);
 
-    deleteBtn.hidden = mode !== 'edit';
+    deleteBtn.hidden = mode !== 'edit' || readOnly;
+    if (readOnly) {
+      const note = form.querySelector<HTMLElement>('.readonly-note')!;
+      note.textContent = options.readOnlyNote ?? '';
+      note.hidden = false;
+      for (const input of form.querySelectorAll<HTMLInputElement>('input, select, textarea')) {
+        input.disabled = true;
+      }
+      form.querySelector<HTMLButtonElement>('button[type="submit"]')!.hidden = true;
+      cancelBtn.textContent = 'Close';
+    }
 
     const showError = (message: string) => {
       error.textContent = message;
@@ -369,6 +384,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     let result: EventDialogResult = null;
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (readOnly) return;
       const value = readDraft();
       if (!value) return;
       result = { action: 'save', calendarFileId: calendar.value, draft: value };
@@ -398,6 +414,7 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
 
     document.body.appendChild(dialog);
     dialog.showModal();
-    title.focus();
+    if (readOnly) cancelBtn.focus();
+    else title.focus();
   });
 }

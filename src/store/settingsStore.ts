@@ -20,6 +20,11 @@ export interface Settings {
   theme: Theme;
   /** Keep a copy of the calendars in this browser (IndexedDB) for fast startup and offline use. */
   offlineCache: boolean;
+  /**
+   * CORS proxy for downloading subscribed calendars whose server blocks browser requests.
+   * A URL template where {url} is replaced by the encoded calendar link. Empty = direct.
+   */
+  corsProxy: string;
   calendars: Record<string, CalendarSettings>;
 }
 
@@ -34,6 +39,7 @@ export function defaultSettings(): Settings {
     timeZone: browserTimeZone(),
     theme: 'system',
     offlineCache: true,
+    corsProxy: '',
     calendars: {},
   };
 }
@@ -82,6 +88,7 @@ export function normalizeSettings(raw: unknown): Settings {
         : defaults.timeZone,
     theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : defaults.theme,
     offlineCache: typeof raw.offlineCache === 'boolean' ? raw.offlineCache : defaults.offlineCache,
+    corsProxy: typeof raw.corsProxy === 'string' ? raw.corsProxy.trim() : defaults.corsProxy,
     calendars,
   };
 }

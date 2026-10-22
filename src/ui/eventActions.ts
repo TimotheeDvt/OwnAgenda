@@ -9,6 +9,7 @@ import {
   eventToDraft,
   getCalendarState,
   ruleOfEvent,
+  subscriptionOf,
 } from '../store/calendarStore';
 import { getCalendarSettings, getSettings } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
@@ -20,8 +21,11 @@ import { showToast } from './toast';
 /** New start/end of an event, in EventDraft format (dates for all-day, ISO instants otherwise). */
 export type EventTimes = Pick<EventDraft, 'allDay' | 'start' | 'end'>;
 
+/** Calendars events can be added to or moved to (subscribed calendars are read-only). */
 function calendarOptions(): CalendarOption[] {
-  return getCalendarState().calendars.map(({ fileId, displayName }) => ({ fileId, displayName }));
+  return getCalendarState()
+    .calendars.filter((c) => !subscriptionOf(c.fileId))
+    .map(({ fileId, displayName }) => ({ fileId, displayName }));
 }
 
 function run(action: () => void): boolean {
@@ -61,7 +65,9 @@ async function chooseScope(
 export async function createEventAt(times: EventTimes): Promise<void> {
   const calendars = calendarOptions();
   if (calendars.length === 0) {
-    showToast('There is no calendar to add the event to. Create one in the sidebar first.');
+    showToast(
+      'There is no editable calendar to add the event to. Create one in the sidebar first.',
+    );
     return;
   }
   const firstVisible = calendars.find(
@@ -93,6 +99,22 @@ export function createEventNow(): Promise<void> {
 
 /** Opens the dialog for an existing event, then applies the edit or deletion. */
 export async function openEvent(event: AgendaEvent): Promise<void> {
+  const subscription = subscriptionOf(event.calendarFileId);
+  if (subscription) {
+    const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
+    await openEventDialog({
+      mode: 'edit',
+      calendars: calendar ? [{ fileId: calendar.fileId, displayName: calendar.displayName }] : [],
+      calendarFileId: event.calendarFileId,
+      draft: eventToDraft(event),
+      timeZone: getSettings().timeZone,
+      rule: event.recurring ? ruleOfEvent(event) : undefined,
+      readOnlyNote:
+        `This event comes from a subscribed online calendar (${new URL(subscription.url).host}). ` +
+        "It is updated from there every day and can't be edited here.",
+    });
+    return;
+  }
   const result = await openEventDialog({
     mode: 'edit',
     calendars: calendarOptions(),

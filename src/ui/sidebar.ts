@@ -1,4 +1,9 @@
-import { getCalendarState, onCalendarsChange, type CalendarState } from '../store/calendarStore';
+import {
+  getCalendarState,
+  onCalendarsChange,
+  subscriptionOf,
+  type CalendarState,
+} from '../store/calendarStore';
 import {
   getCalendarSettings,
   getSettings,
@@ -15,6 +20,8 @@ export interface SidebarActions {
   onRefreshCalendar(fileId: string): void;
   onRenameCalendar(fileId: string): void;
   onNewCalendar(): void;
+  onSubscribe(): void;
+  onSetCorsProxy(): void;
   onPickSearchResult(event: AgendaEvent): void;
   onToggleOfflineCache(enabled: boolean): void;
   onShowShortcuts(): void;
@@ -41,6 +48,14 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   btn.type = 'button';
   btn.addEventListener('click', onClick);
   return btn;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 function iconButton(icon: IconName, label: string, onClick: () => void): HTMLButtonElement {
@@ -113,16 +128,32 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
       updateCalendarSettings(calendar.fileId, index, { color: color.value }),
     );
 
+    const subscription = subscriptionOf(calendar.fileId);
     const name = el('span', 'calendar-name', calendar.displayName);
     name.title = `${calendar.name}${calendar.dirty ? ' (unsaved changes)' : ''}`;
     if (calendar.dirty) name.classList.add('is-dirty');
 
     const label = el('label', 'calendar-label');
     label.append(visible, name);
+    if (subscription) {
+      const host = hostOf(subscription.url);
+      const badge = el('span', 'subscription-badge');
+      badge.innerHTML = ICONS.link;
+      badge.setAttribute('role', 'img');
+      badge.setAttribute('aria-label', 'Subscribed calendar');
+      badge.title =
+        `Subscribed to ${host} (read-only)\n` +
+        `Last updated: ${subscription.lastUpdate?.toLocaleString(undefined, { hour12: false }) ?? 'never'}`;
+      label.appendChild(badge);
+    }
 
     const refreshing = state.refreshing.includes(calendar.fileId);
-    const refresh = iconButton('refresh', `Refresh ${calendar.displayName} from Google Drive`, () =>
-      actions.onRefreshCalendar(calendar.fileId),
+    const refresh = iconButton(
+      'refresh',
+      subscription
+        ? `Update ${calendar.displayName} from ${hostOf(subscription.url)}`
+        : `Refresh ${calendar.displayName} from Google Drive`,
+      () => actions.onRefreshCalendar(calendar.fileId),
     );
     refresh.disabled = refreshing || state.status === 'loading' || state.fromCache;
     if (refreshing) refresh.classList.add('is-spinning');
@@ -138,7 +169,16 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
   nodes.push(list);
 
   if (state.folderId) {
-    nodes.push(button('+ New calendar', 'btn btn-small new-calendar', actions.onNewCalendar));
+    const add = el('div', 'calendar-add');
+    add.append(
+      button('+ New calendar', 'btn btn-small', actions.onNewCalendar),
+      button('+ Subscribe', 'btn btn-small', actions.onSubscribe),
+    );
+    add.lastElementChild!.setAttribute(
+      'title',
+      'Add an online calendar (e.g. your university timetable) from its .ics link',
+    );
+    nodes.push(add);
   }
 
   if (state.warnings.length) {
@@ -160,9 +200,19 @@ function renderOptions(actions: SidebarActions): HTMLElement[] {
     'Stores your calendars in this browser so the agenda opens instantly and stays readable ' +
     'when Google Drive is unreachable.';
 
+  const proxy = getSettings().corsProxy;
+  const proxyButton = button(
+    proxy ? `CORS proxy: ${hostOf(proxy.replace('{url}', ''))}` : 'CORS proxy for subscriptions…',
+    'link-btn',
+    actions.onSetCorsProxy,
+  );
+  proxyButton.title =
+    'Only needed when an online calendar refuses downloads from a web page (CORS errors).';
+
   return [
     el('h2', 'sidebar-title', 'Options'),
     offlineLabel,
+    proxyButton,
     button('Keyboard shortcuts  ( ? )', 'link-btn', actions.onShowShortcuts),
   ];
 }

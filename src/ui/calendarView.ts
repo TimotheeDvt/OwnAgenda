@@ -8,6 +8,7 @@ import {
   eventsInRange,
   getCalendarState,
   onCalendarsChange,
+  subscriptionOf,
 } from '../store/calendarStore';
 import {
   getCalendarSettings,
@@ -43,7 +44,7 @@ const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   footer: { center: VIEW_NAMES.join(',') },
 };
 
-function toEventInput(event: AgendaEvent): EventInput {
+function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
   const { color } = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
   return {
     id: event.id,
@@ -52,6 +53,8 @@ function toEventInput(event: AgendaEvent): EventInput {
     end: event.endInput,
     allDay: event.allDay,
     color,
+    // Events of subscribed calendars are copies of an online calendar: no drag & drop.
+    editable: !readOnly,
     classNames: event.recurring ? ['is-recurring'] : [],
     extendedProps: { agendaEvent: event },
   };
@@ -135,7 +138,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         { start: info.start, end: info.end },
         (cal) => getCalendarSettings(cal.fileId, calendarIndex(cal.fileId)).visible,
       );
-      success(events.map(toEventInput));
+      const subscribed = new Set(
+        getCalendarState()
+          .calendars.filter((c) => subscriptionOf(c.fileId))
+          .map((c) => c.fileId),
+      );
+      success(events.map((e) => toEventInput(e, subscribed.has(e.calendarFileId))));
     },
     eventDidMount: (info) => {
       const agendaEvent = agendaEventOf(info.event);

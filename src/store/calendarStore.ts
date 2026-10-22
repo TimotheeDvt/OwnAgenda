@@ -31,6 +31,14 @@ import {
 } from '../ics/recurringEdit';
 import type { SimpleRule } from '../ics/rrule';
 import { serializeCalendar } from '../ics/serialize';
+import {
+  buildSubscriptionCalendar,
+  isStale,
+  normalizeSubscriptionUrl,
+  subscriptionInfo,
+  type SubscriptionInfo,
+} from '../ics/subscription';
+import { fetchRemoteCalendar } from '../net/remoteCalendar';
 import type { AgendaEvent, CalendarFile, DateRange } from '../types';
 import { eventInputToIso } from '../util/dates';
 import type { CachedFile } from './offlineCache';
@@ -92,6 +100,7 @@ let savedOnce = false;
 
 let conflictHandler: (calendar: CalendarFile) => Promise<ConflictChoice> = async () => 'reload';
 let saveErrorHandler: (calendar: CalendarFile, message: string) => void = () => {};
+let subscriptionErrorHandler: (calendar: CalendarFile, message: string) => void = () => {};
 
 function setState(patch: Partial<CalendarState>): void {
   state = { ...state, ...patch };
@@ -162,6 +171,8 @@ export async function loadCalendars(folderPath: string): Promise<void> {
     });
     if (files.length === 0) warnings.push(`No .ics files found in "${folderPath}".`);
     setState({ status: 'ready', calendars, warnings, folderId, fromCache: false, refreshing: [] });
+    // Subscriptions whose copy is more than a day old are re-downloaded in the background.
+    void syncStaleSubscriptions();
   } catch (err) {
     if (generation !== loadGeneration) return;
     if (state.fromCache && state.calendars.length > 0) {
@@ -297,6 +308,15 @@ function requireCalendar(fileId: string): CalendarFile {
   return calendar;
 }
 
+/** Subscribed calendars are copies of an online calendar: their events can't be edited. */
+function requireEditable(fileId: string): CalendarFile {
+  const calendar = requireCalendar(fileId);
+  if (subscriptionInfo(calendar.vcalendar)) {
+    throw new Error(`"${calendar.displayName}" is a subscribed calendar and can't be edited.`);
+  }
+  return calendar;
+}
+
 /** Applies an edit to one or more calendars, refreshes the view, then saves them. */
 function mutate(calendars: CalendarFile[], apply: () => void): void {
   apply();
@@ -334,7 +354,7 @@ export function ruleOfEvent(event: AgendaEvent): { rule: SimpleRule | null; cust
 }
 
 export function addEvent(fileId: string, draft: EventDraft): void {
-  const calendar = requireCalendar(fileId);
+  const calendar = requireEditable(fileId);
   mutate([calendar], () => {
     createEvent(calendar.vcalendar, draft, getSettings().timeZone);
   });
@@ -348,8 +368,8 @@ export interface EditOptions {
 }
 
 export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOptions = {}): void {
-  const source = requireCalendar(event.calendarFileId);
-  const target = requireCalendar(options.targetFileId ?? source.fileId);
+  const source = requireEditable(event.calendarFileId);
+  const target = requireEditable(options.targetFileId ?? source.fileId);
   const timeZone = getSettings().timeZone;
   const moving = target !== source;
 
@@ -395,7 +415,7 @@ export function editEvent(event: AgendaEvent, draft: EventDraft, options: EditOp
 }
 
 export function deleteEvent(event: AgendaEvent, scope: EditScope = 'all'): void {
-  const calendar = requireCalendar(event.calendarFileId);
+  const calendar = requireEditable(event.calendarFileId);
   mutate([calendar], () => {
     if (!event.recurrenceId) removeEvent(calendar.vcalendar, event.uid);
     else if (!event.recurring || scope === 'this') {
@@ -444,6 +464,101 @@ export function renameCalendar(fileId: string, name: string): void {
     renameCalendarComponent(calendar.vcalendar, trimmed);
     calendar.displayName = trimmed;
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Subscriptions (online calendars copied into the folder)
+
+export function subscriptionOf(fileId: string): SubscriptionInfo | null {
+  const calendar = findCalendar(fileId);
+  return calendar ? subscriptionInfo(calendar.vcalendar) : null;
+}
+
+/**
+ * Subscribes to an online calendar: downloads it, then stores it as a new .ics file in the folder
+ * with its source URL and download time. Returns the new file ID.
+ */
+export async function subscribeCalendar(name: string, link: string): Promise<string> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Please enter a name.');
+  const url = normalizeSubscriptionUrl(link);
+  if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
+  const folderId = state.folderId;
+  const generation = loadGeneration;
+  const text = await fetchRemoteCalendar(url, getSettings().corsProxy);
+  const content = serializeCalendar(buildSubscriptionCalendar(text, url, trimmed));
+  const meta = await createFile(folderId, fileNameFor(trimmed), content);
+  if (generation !== loadGeneration) return meta.id;
+  setState({
+    calendars: [...state.calendars, toCalendarFile(meta, content)].sort(byName),
+    warnings: state.warnings.filter((w) => !w.startsWith('No .ics files')),
+  });
+  return meta.id;
+}
+
+/**
+ * Re-downloads a subscribed calendar and saves the new copy to Drive. Without `force`, only does
+ * so when the copy is more than a day old. Returns 'fresh' when nothing needed to be done.
+ */
+export async function syncSubscription(
+  fileId: string,
+  options: { force?: boolean } = {},
+): Promise<'updated' | 'fresh'> {
+  let calendar = requireCalendar(fileId);
+  let info = subscriptionInfo(calendar.vcalendar);
+  if (!info) throw new Error(`"${calendar.displayName}" is not a subscribed calendar.`);
+  if (!options.force && !isStale(info)) return 'fresh';
+  if (state.refreshing.includes(fileId)) return 'fresh';
+
+  const generation = loadGeneration;
+  setState({ refreshing: [...state.refreshing, fileId] });
+  try {
+    // Another device may already have updated the copy on Drive: start from that one.
+    const meta = await getFileMeta(fileId);
+    if (meta.modifiedTime !== calendar.modifiedTime) {
+      await reloadCalendar(fileId);
+      calendar = requireCalendar(fileId);
+      info = subscriptionInfo(calendar.vcalendar) ?? info;
+      if (!options.force && !isStale(info)) return 'fresh';
+    }
+
+    const text = await fetchRemoteCalendar(info.url, getSettings().corsProxy);
+    if (generation !== loadGeneration) return 'fresh';
+    const updated: CalendarFile = {
+      ...calendar,
+      vcalendar: buildSubscriptionCalendar(text, info.url, calendar.displayName),
+      dirty: true,
+    };
+    editVersions.set(fileId, (editVersions.get(fileId) ?? 0) + 1);
+    setState({ calendars: state.calendars.map((c) => (c.fileId === fileId ? updated : c)) });
+    await requestSave(fileId);
+    return 'updated';
+  } finally {
+    setState({ refreshing: state.refreshing.filter((id) => id !== fileId) });
+  }
+}
+
+/** Updates every subscription whose copy is more than a day old (one at a time). */
+export async function syncStaleSubscriptions(): Promise<void> {
+  const generation = loadGeneration;
+  const stale = state.calendars.filter((c) => {
+    const info = subscriptionInfo(c.vcalendar);
+    return info && isStale(info);
+  });
+  for (const calendar of stale) {
+    if (generation !== loadGeneration) return;
+    try {
+      await syncSubscription(calendar.fileId);
+    } catch (err) {
+      subscriptionErrorHandler(calendar, errorMessage(err));
+    }
+  }
+}
+
+export function setSubscriptionErrorHandler(
+  handler: (calendar: CalendarFile, message: string) => void,
+) {
+  subscriptionErrorHandler = handler;
 }
 
 // ---------------------------------------------------------------------------------------------
