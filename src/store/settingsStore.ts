@@ -1,0 +1,165 @@
+import { DEFAULT_CALENDAR_COLORS, SETTINGS_SAVE_DEBOUNCE_MS, SETTINGS_VERSION } from '../config';
+import { readSettings, writeSettings } from '../drive/appData';
+import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
+
+export const VIEW_NAMES = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'] as const;
+export type ViewName = (typeof VIEW_NAMES)[number];
+export type Theme = 'system' | 'light' | 'dark';
+
+export interface CalendarSettings {
+  color: string;
+  visible: boolean;
+}
+
+export interface Settings {
+  version: number;
+  folderPath: string;
+  defaultView: ViewName;
+  weekStartsOn: number;
+  timeZone: string;
+  theme: Theme;
+  calendars: Record<string, CalendarSettings>;
+}
+
+export type SettingsListener = (settings: Settings) => void;
+
+export function defaultSettings(): Settings {
+  return {
+    version: SETTINGS_VERSION,
+    folderPath: '',
+    defaultView: 'timeGridWeek',
+    weekStartsOn: 1,
+    timeZone: browserTimeZone(),
+    theme: 'system',
+    calendars: {},
+  };
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Merges a raw settings object over the defaults. Invalid fields fall back to defaults; unknown
+ * fields are kept so settings written by a newer version of the app are not lost.
+ */
+export function normalizeSettings(raw: unknown): Settings {
+  const defaults = defaultSettings();
+  if (!isRecord(raw)) return defaults;
+
+  const calendars: Record<string, CalendarSettings> = {};
+  if (isRecord(raw.calendars)) {
+    for (const [fileId, value] of Object.entries(raw.calendars)) {
+      if (!isRecord(value)) continue;
+      calendars[fileId] = {
+        ...value,
+        color: typeof value.color === 'string' && HEX_COLOR.test(value.color) ? value.color : '',
+        visible: typeof value.visible === 'boolean' ? value.visible : true,
+      };
+    }
+  }
+
+  return {
+    ...raw,
+    version: SETTINGS_VERSION,
+    folderPath: typeof raw.folderPath === 'string' ? raw.folderPath.trim() : defaults.folderPath,
+    defaultView: VIEW_NAMES.includes(raw.defaultView as ViewName)
+      ? (raw.defaultView as ViewName)
+      : defaults.defaultView,
+    weekStartsOn:
+      Number.isInteger(raw.weekStartsOn) &&
+      (raw.weekStartsOn as number) >= 0 &&
+      (raw.weekStartsOn as number) <= 6
+        ? (raw.weekStartsOn as number)
+        : defaults.weekStartsOn,
+    timeZone:
+      typeof raw.timeZone === 'string' && isValidTimeZone(raw.timeZone)
+        ? raw.timeZone
+        : defaults.timeZone,
+    theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : defaults.theme,
+    calendars,
+  };
+}
+
+let settings: Settings = defaultSettings();
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let errorHandler: (err: unknown) => void = (err) => console.error(err);
+const listeners = new Set<SettingsListener>();
+
+function notify(): void {
+  listeners.forEach((l) => l(settings));
+}
+
+export function getSettings(): Settings {
+  return settings;
+}
+
+export async function loadSettings(): Promise<Settings> {
+  settings = normalizeSettings(await readSettings());
+  notify();
+  return settings;
+}
+
+function schedulePersist(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    writeSettings(settings).catch(errorHandler);
+  }, SETTINGS_SAVE_DEBOUNCE_MS);
+}
+
+export function updateSettings(patch: Partial<Settings>): void {
+  settings = { ...settings, ...patch };
+  notify();
+  schedulePersist();
+}
+
+/** The saved settings for a calendar, or defaults (color picked by its position in the list). */
+export function getCalendarSettings(fileId: string, index: number): CalendarSettings {
+  const fallbackColor =
+    DEFAULT_CALENDAR_COLORS[Math.max(index, 0) % DEFAULT_CALENDAR_COLORS.length] ?? '#3b82f6';
+  const saved = settings.calendars[fileId];
+  return {
+    visible: saved?.visible ?? true,
+    color: saved?.color || fallbackColor,
+  };
+}
+
+export function updateCalendarSettings(
+  fileId: string,
+  index: number,
+  patch: Partial<CalendarSettings>,
+): void {
+  updateSettings({
+    calendars: {
+      ...settings.calendars,
+      [fileId]: { ...settings.calendars[fileId], ...getCalendarSettings(fileId, index), ...patch },
+    },
+  });
+}
+
+/** Writes any pending change immediately. */
+export async function flushSettings(): Promise<void> {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  await writeSettings(settings);
+}
+
+/** Drops in-memory settings without saving (on sign-out). */
+export function resetSettings(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  settings = defaultSettings();
+  notify();
+}
+
+export function onSettingsChange(listener: SettingsListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function onSettingsSaveError(handler: (err: unknown) => void): void {
+  errorHandler = handler;
+}
