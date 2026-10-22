@@ -1,12 +1,4 @@
-import {
-  createFile,
-  downloadFile,
-  getFileMeta,
-  listIcsFiles,
-  resolvePath,
-  uploadFile,
-  type DriveFileMeta,
-} from '../drive/files';
+import { storage, type FileMeta } from '../storage';
 import {
   createEvent,
   moveComponents,
@@ -156,10 +148,9 @@ export async function loadCalendars(folderPath: string): Promise<void> {
   setState({ status: 'loading', error: null, warnings: [], saveStatus: 'idle', saveError: null });
 
   try {
-    const folderId = await resolvePath(folderPath);
-    const files = await listIcsFiles(folderId);
+    const { folderId, files } = await storage().listFiles(folderPath);
     const results = await Promise.allSettled(
-      files.map(async (meta) => toCalendarFile(meta, await downloadFile(meta.id))),
+      files.map(async (meta) => toCalendarFile(meta, await storage().download(meta.id))),
     );
     if (generation !== loadGeneration) return;
 
@@ -193,8 +184,8 @@ export async function reloadCalendar(fileId: string): Promise<void> {
   const current = findCalendar(fileId);
   if (!current) return;
   const generation = loadGeneration;
-  const meta = await getFileMeta(fileId);
-  const fresh = toCalendarFile(meta, await downloadFile(fileId));
+  const meta = await storage().getMeta(fileId);
+  const fresh = toCalendarFile(meta, await storage().download(fileId));
   if (generation !== loadGeneration) return;
   editVersions.delete(fileId);
   saveErrors.delete(fileId);
@@ -445,7 +436,7 @@ export async function createCalendar(name: string): Promise<string> {
   if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
   const generation = loadGeneration;
   const content = serializeCalendar(newCalendarComponent(trimmed));
-  const meta: DriveFileMeta = await createFile(state.folderId, fileNameFor(trimmed), content);
+  const meta: FileMeta = await storage().create(state.folderId, fileNameFor(trimmed), content);
   if (generation !== loadGeneration) return meta.id;
   const calendar = toCalendarFile(meta, content);
   setState({
@@ -487,7 +478,7 @@ export async function subscribeCalendar(name: string, link: string): Promise<str
   const generation = loadGeneration;
   const text = await fetchRemoteCalendar(url, getSettings().corsProxy);
   const content = serializeCalendar(buildSubscriptionCalendar(text, url, trimmed));
-  const meta = await createFile(folderId, fileNameFor(trimmed), content);
+  const meta = await storage().create(folderId, fileNameFor(trimmed), content);
   if (generation !== loadGeneration) return meta.id;
   setState({
     calendars: [...state.calendars, toCalendarFile(meta, content)].sort(byName),
@@ -514,7 +505,7 @@ export async function syncSubscription(
   setState({ refreshing: [...state.refreshing, fileId] });
   try {
     // Another device may already have updated the copy on Drive: start from that one.
-    const meta = await getFileMeta(fileId);
+    const meta = await storage().getMeta(fileId);
     if (meta.modifiedTime !== calendar.modifiedTime) {
       await reloadCalendar(fileId);
       calendar = requireCalendar(fileId);
@@ -605,7 +596,7 @@ async function runSave(fileId: string): Promise<void> {
   try {
     // Conflict detection: someone (another device, a sync tool…) changed the file since we
     // loaded or last saved it.
-    const meta = await getFileMeta(fileId);
+    const meta = await storage().getMeta(fileId);
     if (meta.modifiedTime !== calendar.modifiedTime) {
       const choice = await conflictHandler(calendar);
       if (generation !== loadGeneration || choice === 'later') return;
@@ -616,7 +607,7 @@ async function runSave(fileId: string): Promise<void> {
     }
 
     const version = editVersions.get(fileId) ?? 0;
-    const updated = await uploadFile(fileId, serializeCalendar(calendar.vcalendar));
+    const updated = await storage().upload(fileId, serializeCalendar(calendar.vcalendar));
     if (generation !== loadGeneration) return;
     calendar.modifiedTime = updated.modifiedTime;
     if ((editVersions.get(fileId) ?? 0) === version) calendar.dirty = false;

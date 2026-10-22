@@ -7,6 +7,8 @@ import {
 } from '../src/ics/subscription';
 import { serializeCalendar } from '../src/ics/serialize';
 import { applyProxy, fetchRemoteCalendar } from '../src/net/remoteCalendar';
+import { setStorageProvider } from '../src/storage';
+import { FakeStorage } from './fakeStorage';
 import { fixture } from './helpers';
 
 const URL_ = 'https://ade.example.fr/anonymous_cal.jsp?resources=123&projectId=8';
@@ -97,33 +99,9 @@ describe('fetchRemoteCalendar', () => {
 // ---------------------------------------------------------------------------------------------
 // Store: subscribe, daily update, read-only
 
-const drive = vi.hoisted(() => ({
-  files: new Map<string, { name: string; content: string; modifiedTime: string }>(),
-  tick: 1,
-}));
-
-vi.mock('../src/drive/files', () => ({
-  resolvePath: vi.fn(async () => 'folder'),
-  listIcsFiles: vi.fn(async () =>
-    [...drive.files].map(([id, f]) => ({ id, name: f.name, modifiedTime: f.modifiedTime })),
-  ),
-  downloadFile: vi.fn(async (id: string) => drive.files.get(id)!.content),
-  getFileMeta: vi.fn(async (id: string) => {
-    const f = drive.files.get(id)!;
-    return { id, name: f.name, modifiedTime: f.modifiedTime };
-  }),
-  uploadFile: vi.fn(async (id: string, content: string) => {
-    const f = drive.files.get(id)!;
-    f.content = content;
-    f.modifiedTime = `t${++drive.tick}`;
-    return { id, name: f.name, modifiedTime: f.modifiedTime };
-  }),
-  createFile: vi.fn(async (_folder: string, name: string, content: string) => {
-    const id = `file-${drive.files.size + 1}`;
-    drive.files.set(id, { name, content, modifiedTime: `t${++drive.tick}` });
-    return { id, name, modifiedTime: drive.files.get(id)!.modifiedTime };
-  }),
-}));
+// The store runs against an in-memory StorageProvider (no Drive, no network).
+const fake = new FakeStorage();
+setStorageProvider(fake);
 
 const store = await import('../src/store/calendarStore');
 
@@ -139,7 +117,7 @@ describe('subscribed calendars in the store', () => {
   let remote = '';
 
   beforeEach(async () => {
-    drive.files.clear();
+    fake.reset();
     remote = fixture('single-event.ics');
     vi.stubGlobal(
       'fetch',
@@ -152,7 +130,7 @@ describe('subscribed calendars in the store', () => {
 
   it('subscribes: downloads the calendar and saves it as a new file', async () => {
     const id = await store.subscribeCalendar('AMU lessons', 'webcal://ade.example.fr/cal.ics');
-    const file = drive.files.get(id)!;
+    const file = fake.files.get(id)!;
     expect(file.name).toBe('AMU lessons.ics');
     expect(file.content).toContain('X-OWNAGENDA-SOURCE-URL:https://ade.example.fr/cal.ics');
     expect(store.subscriptionOf(id)?.url).toBe('https://ade.example.fr/cal.ics');
@@ -177,7 +155,7 @@ describe('subscribed calendars in the store', () => {
       'Renamed by me',
       new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     );
-    drive.files.set('sub', {
+    fake.files.set('sub', {
       name: 'amu.ics',
       content: serializeCalendar(stale),
       modifiedTime: 't1',
@@ -187,7 +165,7 @@ describe('subscribed calendars in the store', () => {
     await store.loadCalendars('Agendas/ics');
     await settle();
 
-    const saved = drive.files.get('sub')!.content;
+    const saved = fake.files.get('sub')!.content;
     expect(saved).toContain('UID:weekly-1@test'); // new content from the online calendar
     expect(saved).toContain('X-WR-CALNAME:Renamed by me');
     const info = store.subscriptionOf('sub')!;
@@ -196,7 +174,7 @@ describe('subscribed calendars in the store', () => {
 
   it('leaves a fresh copy alone unless forced', async () => {
     const fresh = buildSubscriptionCalendar(fixture('single-event.ics'), URL_, 'AMU', new Date());
-    drive.files.set('sub', {
+    fake.files.set('sub', {
       name: 'amu.ics',
       content: serializeCalendar(fresh),
       modifiedTime: 't1',
@@ -208,6 +186,6 @@ describe('subscribed calendars in the store', () => {
     remote = fixture('weekly-exdate.ics');
     expect(await store.syncSubscription('sub', { force: true })).toBe('updated');
     await settle();
-    expect(drive.files.get('sub')!.content).toContain('UID:weekly-1@test');
+    expect(fake.files.get('sub')!.content).toContain('UID:weekly-1@test');
   });
 });

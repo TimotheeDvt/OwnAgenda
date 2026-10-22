@@ -1,4 +1,4 @@
-import { DRIVE_API, DRIVE_UPLOAD_API, SETTINGS_FILE_NAME } from '../config';
+import { DRIVE_API, DRIVE_UPLOAD_API, SETTINGS_FILE_NAME } from '../../config';
 import { buildUrl, createWithContent, driveFetch, driveJson } from './driveClient';
 
 let settingsFileId: string | null = null;

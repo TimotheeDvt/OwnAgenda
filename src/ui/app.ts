@@ -1,6 +1,5 @@
 import { initAuth, isSignedIn, onAuthChange, signIn, signOut } from '../auth/auth';
-import { resetAppDataCache } from '../drive/appData';
-import { getCurrentUser, type DriveUser } from '../drive/files';
+import { storage, type StorageUser } from '../storage';
 import {
   clearCalendars,
   createCalendar,
@@ -112,21 +111,21 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
 // ---------------------------------------------------------------------------------------------
 // Header
 
-function renderUser(user: DriveUser | null): void {
+function renderUser(user: StorageUser | null): void {
   const nodes: Node[] = [];
   if (user) {
-    if (user.photoLink) {
+    if (user.photoUrl) {
       const img = document.createElement('img');
       img.className = 'avatar';
-      img.src = user.photoLink;
+      img.src = user.photoUrl;
       img.alt = '';
       img.referrerPolicy = 'no-referrer';
       nodes.push(img);
     }
     const name = document.createElement('span');
     name.className = 'user-name';
-    name.textContent = user.displayName || user.emailAddress;
-    name.title = user.emailAddress;
+    name.textContent = user.displayName || user.email;
+    name.title = user.email;
     nodes.push(name);
   }
   const signOutButton = button('', 'icon-btn header-icon-btn', () => void handleSignOut());
@@ -391,6 +390,7 @@ function scheduleSnapshot(): void {
     const files = snapshotFiles();
     if (!files) return;
     void writeSnapshot({
+      provider: storage().id,
       email: accountEmail,
       settings: getSettings(),
       files,
@@ -400,11 +400,13 @@ function scheduleSnapshot(): void {
 }
 
 /** Shows the offline copy of this account (if any) while Drive loads. Returns true if shown. */
-async function showOfflineCopy(user: DriveUser | null): Promise<boolean> {
+async function showOfflineCopy(user: StorageUser | null): Promise<boolean> {
   const snapshot = await readSnapshot();
   if (!snapshot) return false;
-  if (user && snapshot.email !== user.emailAddress) {
-    // Another account used this browser before: never show its data.
+  // Copies saved before providers existed came from Google Drive.
+  const sameStorage = (snapshot.provider ?? 'google-drive') === storage().id;
+  if (!sameStorage || (user && snapshot.email !== user.email)) {
+    // Another account (or storage) used this browser before: never show its data.
     await clearSnapshot();
     return false;
   }
@@ -444,10 +446,10 @@ async function enterSignedIn(): Promise<void> {
   layout.menu.hidden = false;
   layout.main.replaceChildren();
 
-  let user: DriveUser | null = null;
+  let user: StorageUser | null = null;
   try {
-    user = await getCurrentUser();
-    accountEmail = user.emailAddress;
+    user = await storage().getUser();
+    accountEmail = user.email;
   } catch {
     // Offline or Drive hiccup: the header just shows the sign-out button.
   }
@@ -491,7 +493,7 @@ function enterSignedOut(): void {
   sidebar = null;
   clearCalendars();
   resetSettings();
-  resetAppDataCache();
+  storage().reset();
   renderSignedOut();
 }
 

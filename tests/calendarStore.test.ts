@@ -1,42 +1,14 @@
 import ICAL from 'ical.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setStorageProvider } from '../src/storage';
+import { FakeStorage } from './fakeStorage';
 import { fixture } from './helpers';
 
-// In-memory fake of the Drive folder: one calendar file, plus files created by the app.
-const drive = vi.hoisted(() => ({
-  content: '',
-  modifiedTime: 't1',
-  uploads: [] as string[],
-  created: [] as { name: string; content: string }[],
-  tick: 1,
-  offline: false,
-}));
-
-vi.mock('../src/drive/files', () => ({
-  resolvePath: vi.fn(async () => {
-    if (drive.offline) throw new TypeError('Failed to fetch');
-    return 'folder';
-  }),
-  listIcsFiles: vi.fn(async () => [
-    { id: 'cal-1', name: 'work.ics', modifiedTime: drive.modifiedTime },
-  ]),
-  downloadFile: vi.fn(async () => drive.content),
-  getFileMeta: vi.fn(async () => ({
-    id: 'cal-1',
-    name: 'work.ics',
-    modifiedTime: drive.modifiedTime,
-  })),
-  uploadFile: vi.fn(async (_id: string, content: string) => {
-    drive.uploads.push(content);
-    drive.content = content;
-    drive.modifiedTime = `t${++drive.tick}`;
-    return { id: 'cal-1', name: 'work.ics', modifiedTime: drive.modifiedTime };
-  }),
-  createFile: vi.fn(async (_folderId: string, name: string, content: string) => {
-    drive.created.push({ name, content });
-    return { id: `new-${drive.created.length}`, name, modifiedTime: 'c1' };
-  }),
-}));
+// The store runs against an in-memory StorageProvider (no Drive, no network).
+const fake = new FakeStorage();
+setStorageProvider(fake);
+/** The test calendar file. */
+const calFile = () => fake.files.get('cal-1')!;
 
 const store = await import('../src/store/calendarStore');
 
@@ -60,12 +32,8 @@ async function settle() {
 }
 
 beforeEach(async () => {
-  drive.content = fixture('single-event.ics');
-  drive.modifiedTime = 't1';
-  drive.uploads = [];
-  drive.created = [];
-  drive.tick = 1;
-  drive.offline = false;
+  fake.reset();
+  fake.put('cal-1', 'work.ics', fixture('single-event.ics'));
   store.clearCalendars();
   store.setConflictHandler(async () => 'reload');
   await store.loadCalendars('Agendas/ics');
@@ -77,8 +45,8 @@ describe('calendarStore editing and saving', () => {
     expect(allEvents()).toHaveLength(2);
     await settle();
 
-    expect(drive.uploads).toHaveLength(1);
-    expect(drive.uploads[0]).toContain('SUMMARY:Planning');
+    expect(fake.uploads).toHaveLength(1);
+    expect(fake.uploads[0]).toContain('SUMMARY:Planning');
     const [calendar] = store.getCalendarState().calendars;
     expect(calendar).toMatchObject({ dirty: false, modifiedTime: 't2' });
     expect(store.getCalendarState().saveStatus).toBe('saved');
@@ -89,18 +57,18 @@ describe('calendarStore editing and saving', () => {
     store.editEvent(eventByUid('single-1@test'), { ...draft, title: 'Renamed' });
     await settle();
 
-    expect(drive.uploads.at(-1)).toContain('SUMMARY:Renamed');
+    expect(fake.uploads.at(-1)).toContain('SUMMARY:Renamed');
     expect(store.hasUnsavedChanges()).toBe(false);
   });
 
   it('deletes events', async () => {
     store.deleteEvent(eventByUid('single-1@test'));
     await settle();
-    expect(drive.uploads[0]).not.toContain('single-1@test');
+    expect(fake.uploads[0]).not.toContain('single-1@test');
   });
 
   it('asks on conflict and reloads when chosen', async () => {
-    drive.modifiedTime = 'changed-elsewhere';
+    calFile().modifiedTime = 'changed-elsewhere';
     const handler = vi.fn(async () => 'reload' as const);
     store.setConflictHandler(handler);
 
@@ -108,26 +76,26 @@ describe('calendarStore editing and saving', () => {
     await settle();
 
     expect(handler).toHaveBeenCalledOnce();
-    expect(drive.uploads).toHaveLength(0);
+    expect(fake.uploads).toHaveLength(0);
     expect(allEvents().map((e) => e.title)).toEqual(['Project kickoff']);
     expect(store.getCalendarState().calendars[0]?.modifiedTime).toBe('changed-elsewhere');
   });
 
   it('overwrites on conflict when chosen', async () => {
-    drive.modifiedTime = 'changed-elsewhere';
+    calFile().modifiedTime = 'changed-elsewhere';
     store.setConflictHandler(async () => 'overwrite');
     store.addEvent('cal-1', draft);
     await settle();
-    expect(drive.uploads).toHaveLength(1);
+    expect(fake.uploads).toHaveLength(1);
     expect(store.getCalendarState().saveStatus).toBe('saved');
   });
 
   it('keeps changes unsaved when the decision is postponed', async () => {
-    drive.modifiedTime = 'changed-elsewhere';
+    calFile().modifiedTime = 'changed-elsewhere';
     store.setConflictHandler(async () => 'later');
     store.addEvent('cal-1', draft);
     await settle();
-    expect(drive.uploads).toHaveLength(0);
+    expect(fake.uploads).toHaveLength(0);
     expect(store.getCalendarState().saveStatus).toBe('unsaved');
     expect(store.hasUnsavedChanges()).toBe(true);
   });
@@ -146,7 +114,7 @@ describe('recurring events in the store', () => {
     expect(second?.recurring).toBe(true);
     store.editEvent(second!, { ...store.eventToDraft(second!), title: 'Moved' }, { scope: 'this' });
     await settle();
-    expect(drive.uploads[0]).toContain('RECURRENCE-ID:20250317T140000Z');
+    expect(fake.uploads[0]).toContain('RECURRENCE-ID:20250317T140000Z');
     expect(allEvents().map((e) => e.title)).toEqual([
       'Project kickoff',
       'Moved',
@@ -171,8 +139,7 @@ describe('recurring events in the store', () => {
 describe('refresh, calendars and search', () => {
   it('refreshes one calendar from Drive and reports whether it changed', async () => {
     expect(await store.refreshCalendar('cal-1')).toBe('unchanged');
-    drive.content = fixture('weekly-exdate.ics');
-    drive.modifiedTime = 't9';
+    fake.put('cal-1', 'work.ics', fixture('weekly-exdate.ics'), 't9');
     expect(await store.refreshCalendar('cal-1')).toBe('updated');
     expect(store.getCalendarState().refreshing).toEqual([]);
     expect(
@@ -185,8 +152,8 @@ describe('refresh, calendars and search', () => {
 
   it('creates a calendar file with a unique name', async () => {
     await store.createCalendar('work');
-    expect(drive.created[0]?.name).toBe('work (2).ics');
-    expect(drive.created[0]?.content).toContain('X-WR-CALNAME:work');
+    expect(fake.files.get('file-2')?.name).toBe('work (2).ics');
+    expect(fake.files.get('file-2')?.content).toContain('X-WR-CALNAME:work');
     expect(store.getCalendarState().calendars.map((c) => c.displayName)).toContain('work');
   });
 
@@ -194,7 +161,7 @@ describe('refresh, calendars and search', () => {
     store.renameCalendar('cal-1', 'Office');
     await settle();
     expect(store.getCalendarState().calendars[0]?.displayName).toBe('Office');
-    expect(drive.uploads[0]).toContain('X-WR-CALNAME:Office');
+    expect(fake.uploads[0]).toContain('X-WR-CALNAME:Office');
   });
 
   it('searches titles, locations and descriptions', () => {
@@ -226,7 +193,7 @@ describe('offline copy', () => {
       },
     ]);
     expect(store.getCalendarState().fromCache).toBe(true);
-    drive.offline = true;
+    fake.offline = true;
     await store.loadCalendars('Agendas/ics');
     const state = store.getCalendarState();
     expect(state.status).toBe('ready');

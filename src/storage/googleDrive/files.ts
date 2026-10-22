@@ -1,4 +1,4 @@
-import { DRIVE_API, DRIVE_UPLOAD_API } from '../config';
+import { DRIVE_API, DRIVE_UPLOAD_API } from '../../config';
 import { buildUrl, createWithContent, driveFetch, driveJson } from './driveClient';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';

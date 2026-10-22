@@ -2,7 +2,7 @@
 // and stays readable when Drive can't be reached. Drive remains the source of truth: the copy is
 // replaced by fresh data as soon as Drive answers.
 
-import type { DriveFileMeta } from '../drive/files';
+import type { FileMeta } from '../storage';
 
 const DB_NAME = 'ics-agenda';
 const DB_VERSION = 1;
@@ -10,11 +10,13 @@ const STORE = 'cache';
 const KEY = 'snapshot';
 
 export interface CachedFile {
-  meta: DriveFileMeta;
+  meta: FileMeta;
   content: string;
 }
 
 export interface OfflineSnapshot {
+  /** Storage the data came from (StorageProvider.id). Missing in copies saved before it existed. */
+  provider?: string;
   /** Account the data belongs to; a different account never sees it. */
   email: string;
   settings: unknown;

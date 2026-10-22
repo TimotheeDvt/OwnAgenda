@@ -1,5 +1,5 @@
-import { getAccessToken, refreshAccessToken } from '../auth/auth';
-import { DRIVE_UPLOAD_API } from '../config';
+import { getAccessToken, refreshAccessToken } from '../../auth/auth';
+import { DRIVE_UPLOAD_API } from '../../config';
 
 export class DriveError extends Error {
   override name = 'DriveError';

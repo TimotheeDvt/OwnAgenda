@@ -1,5 +1,5 @@
 import { DEFAULT_CALENDAR_COLORS, SETTINGS_SAVE_DEBOUNCE_MS, SETTINGS_VERSION } from '../config';
-import { readSettings, writeSettings } from '../drive/appData';
+import { storage } from '../storage';
 import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
 export const VIEW_NAMES = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'] as const;
@@ -119,7 +119,7 @@ export function applyCachedSettings(raw: unknown): void {
 }
 
 export async function loadSettings(): Promise<Settings> {
-  settings = normalizeSettings(await readSettings());
+  settings = normalizeSettings(await storage().readSettings());
   notify();
   return settings;
 }
@@ -128,7 +128,7 @@ function schedulePersist(): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    writeSettings(settings).catch(errorHandler);
+    storage().writeSettings(settings).catch(errorHandler);
   }, SETTINGS_SAVE_DEBOUNCE_MS);
 }
 
@@ -196,7 +196,7 @@ export async function flushSettings(): Promise<void> {
   if (!saveTimer) return;
   clearTimeout(saveTimer);
   saveTimer = null;
-  await writeSettings(settings);
+  await storage().writeSettings(settings);
 }
 
 /** Drops in-memory settings without saving (on sign-out). */
