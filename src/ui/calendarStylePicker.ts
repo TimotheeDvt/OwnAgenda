@@ -26,15 +26,18 @@ export interface StylePickerOptions extends CalendarStyle {
   anchor: HTMLElement;
   calendarName: string;
   onChange(patch: Partial<CalendarStyle>): void;
+  /** Renames the calendar; without it (read-only) the name can't be edited here. */
+  onRename?(name: string): void;
 }
 
 let openPicker: { close(): void } | null = null;
 
 /**
- * Small popover to choose a calendar's color (presets or any color), the color of its text and
+ * Small popover to rename a calendar and choose its color (presets or any color), the color of its text and
  * icon (automatic or a few presets), and its icon: one of the
  * Material Design (Nerd Font nf-md) icons, any pasted emoji or nf-md icon, or none.
- * Changes apply immediately; it closes on Escape or a click outside.
+ * Style changes apply immediately; the name when Enter is pressed, the field is left or the
+ * popover closes. It closes on Escape or a click outside.
  */
 export function openCalendarStylePicker(options: StylePickerOptions): void {
   openPicker?.close();
@@ -43,7 +46,7 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
   const panel = document.createElement('div');
   panel.className = 'style-picker';
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', `Color and icon of ${options.calendarName}`);
+  panel.setAttribute('aria-label', `Name, color and icon of ${options.calendarName}`);
 
   const heading = (text: string) => {
     const h = document.createElement('div');
@@ -51,6 +54,31 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     h.textContent = text;
     return h;
   };
+
+  // Name
+  let calendarName = options.calendarName;
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'style-name-input';
+  nameInput.value = calendarName;
+  nameInput.setAttribute('aria-label', 'Calendar name');
+  nameInput.title =
+    'Stored in the calendar file (X-WR-CALNAME); the file name on Google Drive stays the same.';
+  const commitName = () => {
+    const next = nameInput.value.trim();
+    if (!next) nameInput.value = calendarName;
+    else if (next !== calendarName) {
+      calendarName = next;
+      options.onRename?.(next);
+    }
+  };
+  nameInput.addEventListener('change', commitName);
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitName();
+    }
+  });
 
   // Colors
   const swatches = document.createElement('div');
@@ -122,6 +150,7 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     if (value) setIcon(value, false);
   });
 
+  if (options.onRename) panel.append(heading('Name'), nameInput);
   panel.append(
     heading('Color'),
     swatches,
@@ -173,6 +202,8 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
   }
 
   const close = () => {
+    // Closing doesn't blur the field first: keep a name typed but not confirmed yet.
+    if (options.onRename) commitName();
     panel.remove();
     document.removeEventListener('pointerdown', onOutside, true);
     document.removeEventListener('keydown', onKey, true);

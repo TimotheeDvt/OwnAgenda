@@ -22,7 +22,7 @@ export interface SidebarActions {
   onChangeFolder(): void;
   onReload(): void;
   onRefreshCalendar(fileId: string): void;
-  onRenameCalendar(fileId: string): void;
+  onRenameCalendar(fileId: string, name: string): void;
   onNewCalendar(): void;
   onSubscribe(): void;
   onSetCorsProxy(): void;
@@ -257,8 +257,8 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     color.style.background = settings.color;
     // Font icons take the text color: dark or white, whichever reads best on the square.
     color.style.color = effectiveTextColor(settings);
-    color.setAttribute('aria-label', `Color and icon of ${calendar.displayName}`);
-    color.title = 'Change color and icon';
+    color.setAttribute('aria-label', `Name, color and icon of ${calendar.displayName}`);
+    color.title = 'Change name, color and icon';
     color.addEventListener('click', () =>
       openCalendarStylePicker({
         anchor: color,
@@ -267,6 +267,10 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
         icon: settings.icon,
         textColor: settings.textColor,
         onChange: (patch) => updateCalendarSettings(calendar.fileId, index, patch),
+        // Renaming changes the file: not while read-only.
+        onRename: state.readOnly
+          ? undefined
+          : (newName) => actions.onRenameCalendar(calendar.fileId, newName),
       }),
     );
 
@@ -301,14 +305,11 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     refresh.disabled = refreshing || state.status === 'loading' || state.fromCache;
     if (refreshing) refresh.classList.add('is-spinning');
     if (subscription) refresh.title += `\n${lastUpdated}`;
-    const rename = iconButton('edit', `Rename ${calendar.displayName}`, () =>
-      actions.onRenameCalendar(calendar.fileId),
-    );
 
     const tools = el('span', 'calendar-tools');
     // Read-only (offline / session expired): only showing/hiding stays available.
     if (state.readOnly) tools.append(visible);
-    else tools.append(visible, rename, refresh);
+    else tools.append(visible, refresh);
     item.append(handle, color, label, tools);
     list.appendChild(item);
   });

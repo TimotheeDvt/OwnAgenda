@@ -486,18 +486,8 @@ async function newCalendar(): Promise<void> {
   }
 }
 
-async function renameOne(fileId: string): Promise<void> {
-  const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
-  if (!calendar || blockedByReadOnly()) return;
-  const name = await promptText({
-    title: 'Rename calendar',
-    descriptionHtml:
-      'The name is stored in the calendar file (<code>X-WR-CALNAME</code>); the file name on ' +
-      'Google Drive stays the same.',
-    label: 'Name',
-    value: calendar.displayName,
-  });
-  if (!name || name === calendar.displayName) return;
+function renameOne(fileId: string, name: string): void {
+  if (blockedByReadOnly()) return;
   try {
     renameCalendar(fileId, name);
   } catch (err) {
@@ -569,7 +559,7 @@ function mountMain(): void {
     onChangeFolder: () => void changeFolder(),
     onReload: () => void reloadAll(),
     onRefreshCalendar: (fileId) => void refreshOne(fileId),
-    onRenameCalendar: (fileId) => void renameOne(fileId),
+    onRenameCalendar: renameOne,
     onNewCalendar: () => void newCalendar(),
     onSubscribe: () => void subscribe(),
     onSetCorsProxy: () => void setCorsProxy(),

@@ -1786,6 +1786,7 @@ body.is-resizing-sidebar {
   box-shadow: inset 0 0 0 2px var(--primary);
 }
 
+.style-name-input,
 .style-icon-input {
   width: 100%;
   margin-top: 8px;
@@ -1796,6 +1797,11 @@ body.is-resizing-sidebar {
   color: var(--text);
   font: inherit;
   font-size: 0.85rem;
+}
+
+.style-name-input {
+  margin-top: 0;
+  font-size: 0.9rem;
 }
 
 /* Calendar icon on events: in the top-right corner of event blocks, on the line of the hours
