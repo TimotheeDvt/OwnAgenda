@@ -1,4 +1,10 @@
-import { Calendar, type EventApi, type EventInput, type ToolbarInput } from '@fullcalendar/core';
+import {
+  Calendar,
+  type DayHeaderContentArg,
+  type EventApi,
+  type EventInput,
+  type ToolbarInput,
+} from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
@@ -31,7 +37,6 @@ import {
   type EventTimes,
 } from './eventActions';
 import { captureToClipboard } from './captureView';
-import { ICONS } from './icons';
 import intlTimeZonePlugin from './timeZonePlugin';
 
 export interface CalendarView {
@@ -50,7 +55,7 @@ export interface CalendarView {
 export const NARROW_QUERY = '(max-width: 720px)';
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
-  // 'capture' (camera, only shown in list view, see CSS) sits just left of the view buttons.
+  // 'capture' (camera) sits just left of the view buttons.
   header: {
     left: 'prev,next today undo,redo',
     center: 'title',
@@ -67,6 +72,31 @@ const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
 // 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
 const WIDE_SLOT_LABEL = { hour: '2-digit', minute: '2-digit', hour12: false } as const;
 const NARROW_SLOT_LABEL = { hour: '2-digit', hour12: false } as const;
+
+/**
+ * Column headers: "22 Thursday" in week/day views (day of the month in bold), "Thursday" in
+ * month view. Both weekday names are rendered; CSS shows the long one only where it fits.
+ */
+function dayHeaderContent(arg: DayHeaderContentArg) {
+  // Formatted by the calendar so the date is read in its time zone, not the browser's.
+  const format = (options: Intl.DateTimeFormatOptions) =>
+    arg.view.calendar.formatDate(arg.date, options);
+  const label = document.createElement('span');
+  label.className = 'day-header-label';
+  if (arg.view.type.startsWith('timeGrid')) {
+    const day = document.createElement('b');
+    day.textContent = format({ day: '2-digit' });
+    label.append(day, ' ');
+  }
+  const long = document.createElement('span');
+  long.className = 'weekday-long';
+  long.textContent = format({ weekday: 'long' });
+  const short = document.createElement('span');
+  short.className = 'weekday-short';
+  short.textContent = format({ weekday: 'short' });
+  label.append(long, short);
+  return { domNodes: [label] };
+}
 
 function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
   const settings = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
@@ -192,24 +222,10 @@ function timesOf(event: EventApi): EventTimes | null {
 }
 
 export function mountCalendarView(host: HTMLElement): CalendarView {
-  /** Copies the view (the grid, like a screenshot of it) to the clipboard, without the button. */
+  /** Copies the view (the grid, like a screenshot of it) to the clipboard. */
   const captureView = () => {
     const view = host.querySelector<HTMLElement>('.fc-view-harness');
-    if (view) captureToClipboard(view, { exclude: (node) => node === captureCorner });
-  };
-
-  // Camera button in the grid's empty top-left cell (above "Full day", left of Monday). In list
-  // view, which has no such cell, the toolbar's camera button is shown instead (CSS).
-  const captureCorner = document.createElement('button');
-  captureCorner.type = 'button';
-  captureCorner.className = 'icon-btn capture-corner';
-  captureCorner.innerHTML = ICONS.camera;
-  captureCorner.title = 'Copy the calendar view as an image';
-  captureCorner.setAttribute('aria-label', 'Copy the calendar view as an image');
-  captureCorner.addEventListener('click', captureView);
-  const placeCaptureCorner = () => {
-    const harness = host.querySelector('.fc-view-harness');
-    if (harness && captureCorner.parentElement !== harness) harness.appendChild(captureCorner);
+    if (view) captureToClipboard(view);
   };
 
   const initial = getSettings();
@@ -224,6 +240,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const calendar = new Calendar(host, {
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, intlTimeZonePlugin],
     initialView: initial.defaultView,
+    // English with day-before-month dates (e.g. titles: "20 – 26 Oct 2026").
+    locale: 'en-GB',
     firstDay: initial.weekStartsOn,
     timeZone: initial.timeZone,
     headerToolbar: toolbar().header,
@@ -240,7 +258,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       undo: { text: '', hint: 'Undo', click: () => undoLastChange() },
       redo: { text: '', hint: 'Redo', click: () => redoLastChange() },
     },
-    allDayText: 'Full day',
+    // No label next to the all-day row.
+    allDayText: '',
+    dayHeaderContent,
     // 24-hour clock everywhere (time axis, event times, list view).
     slotLabelFormat: slotLabelFormat(),
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -306,7 +326,6 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       placeIcon(info.el, icon, textColor);
     },
     datesSet: (arg) => {
-      placeCaptureCorner();
       updateHistoryButtons();
       const view = arg.view.type as ViewName;
       // Same dates in another view reuse the loaded events; reload so the list view can leave
@@ -321,7 +340,6 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
   });
   calendar.render();
-  placeCaptureCorner();
 
   /** Enables undo/redo only when there is something to undo/redo and changes can be saved. */
   function updateHistoryButtons(): void {
