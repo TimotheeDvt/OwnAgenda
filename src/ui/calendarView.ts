@@ -21,6 +21,8 @@ import {
 import type { AgendaEvent } from '../types';
 import { readableTextColor } from '../util/color';
 import { changeEventTimes, createEventAt, openEvent, type EventTimes } from './eventActions';
+import { captureToClipboard } from './captureView';
+import { ICONS } from './icons';
 import intlTimeZonePlugin from './timeZonePlugin';
 
 export interface CalendarView {
@@ -39,12 +41,13 @@ export interface CalendarView {
 export const NARROW_QUERY = '(max-width: 720px)';
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
-  header: { left: 'prev,next today', center: 'title', right: VIEW_NAMES.join(',') },
+  // 'capture' (camera, only shown in list view — see CSS) sits just left of the view buttons.
+  header: { left: 'prev,next today', center: 'title', right: `capture ${VIEW_NAMES.join(',')}` },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: { left: 'prev,next', center: 'title', right: 'today' },
-  footer: { center: VIEW_NAMES.join(',') },
+  footer: { center: `capture ${VIEW_NAMES.join(',')}` },
 };
 
 function toEventInput(event: AgendaEvent, readOnly: boolean): EventInput {
@@ -120,6 +123,26 @@ function timesOf(event: EventApi): EventTimes | null {
 }
 
 export function mountCalendarView(host: HTMLElement): CalendarView {
+  /** Copies the view (the grid, like a screenshot of it) to the clipboard, without the button. */
+  const captureView = () => {
+    const view = host.querySelector<HTMLElement>('.fc-view-harness');
+    if (view) captureToClipboard(view, { exclude: (node) => node === captureCorner });
+  };
+
+  // Camera button in the grid's empty top-left cell (above "Full day", left of Monday). In list
+  // view, which has no such cell, the toolbar's camera button is shown instead (CSS).
+  const captureCorner = document.createElement('button');
+  captureCorner.type = 'button';
+  captureCorner.className = 'icon-btn capture-corner';
+  captureCorner.innerHTML = ICONS.camera;
+  captureCorner.title = 'Copy the calendar view as an image';
+  captureCorner.setAttribute('aria-label', 'Copy the calendar view as an image');
+  captureCorner.addEventListener('click', captureView);
+  const placeCaptureCorner = () => {
+    const harness = host.querySelector('.fc-view-harness');
+    if (harness && captureCorner.parentElement !== harness) harness.appendChild(captureCorner);
+  };
+
   const initial = getSettings();
   const narrow = window.matchMedia(NARROW_QUERY);
   const toolbar = () => (narrow.matches ? NARROW_TOOLBAR : WIDE_TOOLBAR);
@@ -132,6 +155,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     headerToolbar: toolbar().header,
     footerToolbar: toolbar().footer,
     buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
+    customButtons: {
+      // Camera icon (CSS); copies the view, like a screenshot of it, to the clipboard.
+      capture: {
+        text: '',
+        hint: 'Copy the calendar view as an image',
+        click: () => captureView(),
+      },
+    },
     allDayText: 'Full day',
     // 24-hour clock everywhere (time axis, event times, list view).
     slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -190,6 +221,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       placeIcon(info.el, icon, textColor);
     },
     datesSet: (arg) => {
+      placeCaptureCorner();
       const view = arg.view.type as ViewName;
       if (VIEW_NAMES.includes(view) && view !== getSettings().defaultView) {
         updateSettings({ defaultView: view });
@@ -197,6 +229,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
   });
   calendar.render();
+  placeCaptureCorner();
 
   const onResize = () => {
     calendar.setOption('headerToolbar', toolbar().header);

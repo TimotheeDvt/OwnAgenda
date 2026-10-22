@@ -9,18 +9,18 @@ export const ICON_FONT_FAMILY = 'Agenda Icons';
  * Registers the icon font for the icon codepoints only. Thanks to the unicode-range, the browser
  * downloads it only when an icon is actually on screen, and normal text never uses it. It is
  * first in the page's font stack (see main.css), so icons render anywhere text does.
+ *
+ * Declared as a stylesheet @font-face (not the FontFace API) so that "capture view" can find and
+ * embed it in the image.
  */
 export function registerIconFont(): void {
-  if (typeof FontFace === 'undefined') return;
-  try {
-    const face = new FontFace(ICON_FONT_FAMILY, `url(${fontUrl}) format('woff2')`, {
-      unicodeRange: 'U+F0000-FFFFD',
-      display: 'block',
-    });
-    document.fonts.add(face);
-  } catch (err) {
-    console.warn('Could not register the icon font', err);
-  }
+  const style = document.createElement('style');
+  style.dataset.iconFont = '';
+  style.textContent =
+    `@font-face { font-family: '${ICON_FONT_FAMILY}'; ` +
+    `src: url('${fontUrl}') format('woff2'); ` +
+    `unicode-range: U+F0000-FFFFD; font-display: block; }`;
+  document.head.appendChild(style);
 }
 
 /** Material Design icon → character (as stored in settings). */

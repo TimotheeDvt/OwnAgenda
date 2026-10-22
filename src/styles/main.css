@@ -1780,3 +1780,48 @@ body.is-resizing-sidebar {
   width: 13px;
   height: 13px;
 }
+
+/* "Capture view" button (camera icon) in the calendar toolbar. */
+.calendar-host.fc .fc-capture-button {
+  position: relative;
+  width: 2.4em;
+  min-height: 2.1em;
+}
+
+.calendar-host.fc .fc-capture-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+/* Camera button in the grid's empty top-left cell (week/day: above "Full day"; month: corner of
+   the first header cell). List view has no such cell: the toolbar camera is used there. */
+.calendar-host.fc .capture-corner {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  z-index: 5;
+  width: 28px;
+  height: 24px;
+}
+
+.calendar-host.fc .capture-corner svg {
+  width: 16px;
+  height: 16px;
+}
+
+.calendar-host.fc .fc-view-harness:has(.fc-list) .capture-corner {
+  display: none;
+}
+
+.calendar-host.fc:not(:has(.fc-list)) .fc-capture-button {
+  display: none;
+}

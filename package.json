@@ -21,6 +21,7 @@
     "@fullcalendar/list": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
     "@mdi/font": "^7.4.47",
+    "html-to-image": "^1.11.13",
     "ical.js": "^2.2.1"
   },
   "devDependencies": {
