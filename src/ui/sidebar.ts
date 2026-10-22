@@ -54,6 +54,22 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   return btn;
 }
 
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['day', 86_400_000],
+  ['hour', 3_600_000],
+  ['minute', 60_000],
+];
+
+/** "5 minutes ago", "3 hours ago", "yesterday", "12 days ago"; "just now" under a minute. */
+function timeAgo(date: Date, now = Date.now()): string {
+  const elapsed = Math.max(0, now - date.getTime());
+  for (const [unit, ms] of TIME_UNITS) {
+    if (elapsed >= ms) return relativeTime.format(-Math.floor(elapsed / ms), unit);
+  }
+  return 'just now';
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).host;
@@ -261,15 +277,16 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
     const label = el('span', 'calendar-label');
     label.append(name);
+    const lastUpdated = subscription
+      ? `Last updated: ${subscription.lastUpdate ? timeAgo(subscription.lastUpdate) : 'never'}`
+      : '';
     if (subscription) {
       const host = hostOf(subscription.url);
       const badge = el('span', 'subscription-badge');
       badge.innerHTML = ICONS.link;
       badge.setAttribute('role', 'img');
       badge.setAttribute('aria-label', 'Subscribed calendar');
-      badge.title =
-        `Subscribed to ${host} (read-only)\n` +
-        `Last updated: ${subscription.lastUpdate?.toLocaleString(undefined, { hour12: false }) ?? 'never'}`;
+      badge.title = `Subscribed to ${host} (read-only)\n${lastUpdated}`;
       label.appendChild(badge);
     }
 
@@ -283,6 +300,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     );
     refresh.disabled = refreshing || state.status === 'loading' || state.fromCache;
     if (refreshing) refresh.classList.add('is-spinning');
+    if (subscription) refresh.title += `\n${lastUpdated}`;
     const rename = iconButton('edit', `Rename ${calendar.displayName}`, () =>
       actions.onRenameCalendar(calendar.fileId),
     );
