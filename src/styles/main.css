@@ -1105,6 +1105,25 @@ code {
 
 /* Keyboard shortcuts dialog */
 
+/* Dev-only settings viewer (settingsDebug.ts). */
+.settings-debug {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.settings-debug-json {
+  margin: 0;
+  max-height: 65vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
 .shortcut-list {
   display: grid;
   grid-template-columns: auto 1fr;

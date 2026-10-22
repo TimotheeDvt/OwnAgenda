@@ -15,6 +15,7 @@ import {
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { openCalendarStylePicker } from './calendarStylePicker';
+import { showSettingsDebug } from './settingsDebug';
 import { ICONS, statusIcon, type IconName } from './icons';
 import { mountSearch } from './search';
 
@@ -360,6 +361,11 @@ function renderFooter(actions: SidebarActions): HTMLElement[] {
   // A dot shows that a proxy is set.
   proxyButton.classList.toggle('is-active', Boolean(proxy));
 
+  // Dev server only (`npm run dev`): left out of production builds.
+  if (import.meta.env.DEV) {
+    const debug = iconButton('bug', 'Debug: show the settings file', showSettingsDebug);
+    return [offline, proxyButton, shortcuts, debug];
+  }
   return [offline, proxyButton, shortcuts];
 }
 
