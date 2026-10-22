@@ -1110,9 +1110,10 @@ kbd {
 /* Reordering calendars */
 
 .drag-handle {
-  width: 22px;
+  width: 14px;
   height: 28px;
-  margin-left: -6px;
+  margin: 0 -4px 0 -2px;
+  overflow: visible;
   cursor: grab;
   /* Let pointer events drive the drag on touch screens instead of scrolling. */
   touch-action: none;
@@ -1130,15 +1131,34 @@ kbd {
   box-shadow: var(--shadow);
 }
 
+/* Where hovering exists, the handle takes no space until the row is hovered (or focused), then
+   slides in and nudges the row's content to the right. Always visible on touch screens. */
 @media (hover: hover) {
   .calendar-item .drag-handle {
+    width: 0;
+    /* Cancels the row's gap so a hidden handle leaves no space. */
+    margin: 0 -8px 0 0;
     opacity: 0;
+    overflow: hidden;
+    transition:
+      width 0.12s ease,
+      margin 0.12s ease,
+      opacity 0.12s ease;
   }
 
   .calendar-item:hover .drag-handle,
-  .calendar-item .drag-handle:focus-visible,
-  .calendar-list.is-reordering .drag-handle {
+  .calendar-item:focus-within .drag-handle,
+  .calendar-item.is-dragging .drag-handle {
+    width: 14px;
+    margin: 0 -4px 0 -2px;
     opacity: 1;
+    overflow: visible;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
+  .calendar-item .drag-handle {
+    transition: none;
   }
 }
 

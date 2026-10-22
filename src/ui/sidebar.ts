@@ -102,9 +102,16 @@ function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElemen
 /** After a keyboard move the list re-renders: put focus back on the moved calendar's handle. */
 let focusAfterRender: string | null = null;
 
+/** Distance from the top/bottom edge of the scrolling panel where dragging scrolls it. */
+const AUTO_SCROLL_EDGE_PX = 40;
+const AUTO_SCROLL_STEP_PX = 12;
+
 /**
- * Pointer-based drag (mouse, pen and touch alike): the row follows the pointer by moving in the
- * list as it crosses the middle of its neighbours. The new order is saved on release.
+ * Pointer-based drag (mouse, pen and touch alike): the row follows the pointer, passing over as
+ * many rows as needed, and the panel scrolls near its edges. The new order is saved on release.
+ *
+ * The dragged row itself is never removed from the page (its neighbours are moved around it
+ * instead): removing it would cancel the pointer capture and stop the drag after one step.
  */
 function startDrag(
   e: PointerEvent,
@@ -116,7 +123,13 @@ function startDrag(
   const item = handle.closest<HTMLLIElement>('li');
   if (!item) return;
   e.preventDefault();
-  handle.setPointerCapture(e.pointerId);
+  try {
+    handle.setPointerCapture(e.pointerId);
+  } catch {
+    // Not critical: the window listeners below still follow the pointer.
+  }
+  const pointerId = e.pointerId;
+  const scroller = list.closest<HTMLElement>('.sidebar-content');
   const from = [...list.children].indexOf(item);
   item.classList.add('is-dragging');
   list.classList.add('is-reordering');
@@ -126,29 +139,42 @@ function startDrag(
     return rect.top + rect.height / 2;
   };
   const onMove = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return;
+    ev.preventDefault();
+    if (scroller) {
+      const bounds = scroller.getBoundingClientRect();
+      if (ev.clientY < bounds.top + AUTO_SCROLL_EDGE_PX) scroller.scrollTop -= AUTO_SCROLL_STEP_PX;
+      else if (ev.clientY > bounds.bottom - AUTO_SCROLL_EDGE_PX) {
+        scroller.scrollTop += AUTO_SCROLL_STEP_PX;
+      }
+    }
+    // Moving up: move the rows above to just after the dragged one.
     let prev = item.previousElementSibling;
     while (prev && ev.clientY < middle(prev)) {
-      list.insertBefore(item, prev);
+      list.insertBefore(prev, item.nextElementSibling);
       prev = item.previousElementSibling;
     }
+    // Moving down: move the rows below to just before it.
     let next = item.nextElementSibling;
     while (next && ev.clientY > middle(next)) {
       list.insertBefore(next, item);
       next = item.nextElementSibling;
     }
   };
-  const onEnd = () => {
-    handle.removeEventListener('pointermove', onMove);
-    handle.removeEventListener('pointerup', onEnd);
-    handle.removeEventListener('pointercancel', onEnd);
+  const onEnd = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onEnd);
+    window.removeEventListener('pointercancel', onEnd);
     item.classList.remove('is-dragging');
     list.classList.remove('is-reordering');
     const to = [...list.children].indexOf(item);
     if (to !== from) moveCalendar(orderedIds, from, to);
   };
-  handle.addEventListener('pointermove', onMove);
-  handle.addEventListener('pointerup', onEnd);
-  handle.addEventListener('pointercancel', onEnd);
+  // On the window, so the drag keeps following the pointer wherever it goes.
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onEnd);
+  window.addEventListener('pointercancel', onEnd);
 }
 
 function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLElement[] {
