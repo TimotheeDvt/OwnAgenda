@@ -32,8 +32,6 @@ export interface EventDialogOptions {
   rule?: { rule: SimpleRule | null; custom: boolean };
   /** Editing one occurrence of a series: the caller asks which occurrences a change applies to. */
   occurrence?: boolean;
-  /** Show the event without editing (e.g. events of a subscribed calendar), with this note. */
-  readOnlyNote?: string;
   /** Offer a "Duplicate" button (edit mode): closes with the event's current values. */
   canDuplicate?: boolean;
   /** Dialog title instead of the default one ("New event", "Edit event"...). */
@@ -123,7 +121,6 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     dialog.innerHTML = `
       <form class="event-form" novalidate>
         <h2 id="${id}-title"></h2>
-        <p class="readonly-note" hidden></p>
         <label class="field">Title
           <input name="title" class="title-input" type="text" autocomplete="off" />
         </label>
@@ -226,9 +223,8 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     const cancelBtn = form.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
     const duplicateBtn = form.querySelector<HTMLButtonElement>('[data-action="duplicate"]')!;
 
-    const readOnly = options.readOnlyNote !== undefined;
     dialog.querySelector('h2')!.textContent =
-      options.heading ?? (mode === 'create' ? 'New event' : readOnly ? 'Event' : 'Edit event');
+      options.heading ?? (mode === 'create' ? 'New event' : 'Edit event');
 
     const calendar = createCalendarPicker(calendars, options.calendarFileId, `${id}-calendar`);
     form.querySelector('.calendar-picker-host')!.replaceWith(calendar.element);
@@ -378,21 +374,8 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
       }
     });
 
-    deleteBtn.hidden = mode !== 'edit' || readOnly;
+    deleteBtn.hidden = mode !== 'edit';
     duplicateBtn.hidden = mode !== 'edit' || !options.canDuplicate;
-    if (readOnly) {
-      const note = form.querySelector<HTMLElement>('.readonly-note')!;
-      note.textContent = options.readOnlyNote ?? '';
-      note.hidden = false;
-      for (const input of form.querySelectorAll<HTMLInputElement>(
-        'input, select, textarea, .time-picker-btn',
-      )) {
-        input.disabled = true;
-      }
-      calendar.setDisabled(true);
-      form.querySelector<HTMLButtonElement>('button[type="submit"]')!.hidden = true;
-      cancelBtn.textContent = 'Close';
-    }
 
     const showError = (message: string) => {
       error.textContent = message;
@@ -491,7 +474,6 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     let result: EventDialogResult = null;
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      if (readOnly) return;
       const value = readDraft();
       if (!value) return;
       result = { action: 'save', calendarFileId: calendar.value, draft: value };
@@ -499,7 +481,6 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
     });
     cancelBtn.addEventListener('click', () => dialog.close());
     duplicateBtn.addEventListener('click', () => {
-      // Read-only fields are disabled, but their values are still the event's.
       const value = readDraft();
       if (!value) return;
       // Unchanged repeat settings: the copy repeats like the original (unless its rule is too
@@ -532,7 +513,6 @@ export function openEventDialog(options: EventDialogOptions): Promise<EventDialo
 
     document.body.appendChild(dialog);
     dialog.showModal();
-    if (readOnly) cancelBtn.focus();
-    else title.focus();
+    title.focus();
   });
 }

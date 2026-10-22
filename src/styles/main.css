@@ -681,13 +681,137 @@ code {
   margin: 0;
 }
 
-.event-form .readonly-note {
+.event-dialog .readonly-note {
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* Event view (read-only, see eventView.ts): title with the calendar's color, then one row per
+   detail with an icon; the pen in the top-right corner switches to editing. */
+.event-view {
+  display: grid;
+  gap: 16px;
+}
+
+.event-view:not([open]) {
+  display: none;
+}
+
+.event-view-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.event-view-color {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 0.3em;
+  border-radius: 4px;
+  background: var(--muted);
+}
+
+.event-view .event-view-header h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.event-view .event-view-edit {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin: -6px -8px 0 0;
+  color: var(--text);
+}
+
+.event-view .event-view-delete {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin: -6px 0 0;
+  color: var(--danger);
+}
+
+.event-view .event-view-delete svg {
+  width: 20px;
+  height: 20px;
+}
+
+.event-view .event-view-edit svg {
+  width: 20px;
+  height: 20px;
+}
+
+.event-view-tag {
+  flex: none;
+  margin-top: 0.25em;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.event-view-details {
+  display: grid;
+  gap: 12px;
+}
+
+.event-view-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.event-view-icon {
+  flex: none;
+  display: inline-flex;
+  /* Lines up with the first line of text, and with the color square above. */
+  width: 14px;
+  justify-content: center;
+  margin-top: 0.1em;
+  color: var(--muted);
+}
+
+.event-view-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-view-muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.event-view-description {
+  white-space: pre-wrap;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.event-view a {
+  color: var(--primary);
+}
+
+.event-view .dialog-actions {
+  margin-top: 4px;
 }
 
 .event-dialog .dialog-actions {

@@ -19,6 +19,7 @@ import type { AgendaEvent } from '../types';
 import { instantToWall, wallToInstant } from '../util/dates';
 import { chooseOption, type Choice } from './choiceDialog';
 import { openEventDialog, type CalendarOption } from './eventDialog';
+import { openEventView } from './eventView';
 import { showToast } from './toast';
 
 /** New start/end of an event, in EventDraft format (dates for all-day, ISO instants otherwise). */
@@ -138,29 +139,67 @@ async function duplicateEvent(calendarFileId: string, draft: EventDraft): Promis
   }
 }
 
-/** Opens the dialog for an existing event, then applies the edit, deletion or duplication. */
+/**
+ * Shows an event (read-only view). From there, the pen opens the edit dialog (not for subscribed
+ * calendars or while read-only) and Duplicate opens a "new event" dialog with a copy.
+ */
 export async function openEvent(event: AgendaEvent): Promise<void> {
   const subscription = subscriptionOf(event.calendarFileId);
   const readOnly = getCalendarState().readOnly;
-  if (subscription || readOnly) {
-    const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
-    const result = await openEventDialog({
-      mode: 'edit',
-      calendars: calendar ? [toOption(calendar)] : [],
-      calendarFileId: event.calendarFileId,
-      draft: eventToDraft(event),
-      timeZone: getSettings().timeZone,
-      rule: event.recurring ? ruleOfEvent(event) : undefined,
-      readOnlyNote: readOnly
-        ? readOnlyMessage(readOnly)
-        : `This event comes from a subscribed online calendar (${new URL(subscription!.url).host}). ` +
-          "It is updated from there every day and can't be edited here.",
-      // A subscribed event can still be copied into one of your calendars (not while offline).
-      canDuplicate: !readOnly,
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
+  const draft = eventToDraft(event);
+  const rule = event.recurring ? ruleOfEvent(event) : undefined;
+  const choice = await openEventView({
+    draft,
+    timeZone: getSettings().timeZone,
+    calendar: calendar ? toOption(calendar) : undefined,
+    rule,
+    note: readOnly ? readOnlyMessage(readOnly) : undefined,
+    readOnlyTag: subscription
+      ? `From a subscribed online calendar (${new URL(subscription.url).host}), updated from ` +
+        "there every day: it can't be edited here."
+      : undefined,
+    canEdit: !subscription && !readOnly,
+    onDelete: () => confirmAndDelete(event),
+    // A subscribed event can still be copied into one of your calendars (not while offline).
+    canDuplicate: !readOnly,
+  });
+  if (choice === 'duplicate') {
+    // The copy repeats like the original (unless its rule is too complex for the editor).
+    await duplicateEvent(event.calendarFileId, {
+      ...draft,
+      rrule: rule && !rule.custom ? rule.rule : null,
     });
-    if (result?.action === 'duplicate') await duplicateEvent(result.calendarFileId, result.draft);
-    return;
+  } else if (choice === 'edit') {
+    await editExistingEvent(event);
   }
+}
+
+/** Asks for confirmation (which occurrences, for a series), then deletes. True if deleted. */
+async function confirmAndDelete(event: AgendaEvent): Promise<boolean> {
+  let scope: EditScope = 'all';
+  if (event.recurring) {
+    const chosen = await chooseScope('delete', { this: true, following: true });
+    if (!chosen) return false;
+    scope = chosen;
+  } else {
+    const choice = await chooseOption(
+      'Delete event?',
+      `"${event.title || 'This event'}" will be removed from the calendar file.`,
+      [
+        { value: 'cancel', label: 'Cancel' },
+        { value: 'delete', label: 'Delete', kind: 'danger' },
+      ],
+    );
+    if (choice !== 'delete') return false;
+  }
+  if (!run(() => deleteEvent(event, scope))) return false;
+  showToast('Event deleted.');
+  return true;
+}
+
+/** Opens the edit dialog for an event, then applies the edit, deletion or duplication. */
+async function editExistingEvent(event: AgendaEvent): Promise<void> {
   const result = await openEventDialog({
     mode: 'edit',
     calendars: calendarOptions(),
