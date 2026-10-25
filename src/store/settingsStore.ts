@@ -61,6 +61,8 @@ export interface Settings {
    * the .ics files, so events of subscribed calendars can be ghosted too.
    */
   ghostEvents: GhostEvent[];
+  /** False hides every ghost event from the calendar (toolbar toggle); they stay ghosted. */
+  showGhosts: boolean;
 }
 
 export interface GhostEvent {
@@ -86,6 +88,7 @@ export function defaultSettings(): Settings {
     calendarOrder: [],
     calendars: {},
     ghostEvents: [],
+    showGhosts: true,
   };
 }
 
@@ -144,6 +147,7 @@ export function normalizeSettings(raw: unknown): Settings {
       : defaults.calendarOrder,
     calendars,
     ghostEvents: normalizeGhostEvents(raw.ghostEvents),
+    showGhosts: typeof raw.showGhosts === 'boolean' ? raw.showGhosts : defaults.showGhosts,
   };
 }
 

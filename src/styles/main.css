@@ -2137,6 +2137,46 @@ body.is-resizing-sidebar {
     center / contain no-repeat;
 }
 
+/* "Show/hide all ghosts" button (ghost icon, crossed out while ghosts are hidden). */
+.calendar-host.fc .fc-ghosts-button {
+  position: relative;
+  width: 2.4em;
+  min-height: 2.1em;
+}
+
+.calendar-host.fc .fc-ghosts-button::before,
+.calendar-host.fc .fc-ghosts-button[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+}
+
+.calendar-host.fc .fc-ghosts-button::before {
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 10h.01'/%3E%3Cpath d='M15 10h.01'/%3E%3Cpath d='M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 10h.01'/%3E%3Cpath d='M15 10h.01'/%3E%3Cpath d='M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.calendar-host.fc .fc-ghosts-button[aria-pressed='true']::before {
+  opacity: 0.5;
+}
+
+/* The slash over the ghost while ghosts are hidden. */
+.calendar-host.fc .fc-ghosts-button[aria-pressed='true']::after {
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    currentColor calc(50% - 1px),
+    currentColor calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
 /* Text & icon color choices: tiles preview "Aa" on the calendar's color. */
 .style-text-colors {
   display: grid;

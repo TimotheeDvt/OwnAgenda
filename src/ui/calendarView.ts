@@ -81,14 +81,14 @@ const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: {
     left: 'today prev,next undo,redo',
     center: 'title',
-    right: `capture ${WIDE_VIEW_BUTTONS.join(',')}`,
+    right: `ghosts capture ${WIDE_VIEW_BUTTONS.join(',')}`,
   },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: { left: 'today prev,next', center: 'title', right: '' },
   // Undo/redo at the bottom, within reach of the thumb; the views in a menu (see openViewMenu).
-  footer: { center: 'undo,redo capture viewMenu' },
+  footer: { center: 'undo,redo ghosts capture viewMenu' },
 };
 
 // 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
@@ -321,6 +321,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         hint: 'Copy the calendar view as an image',
         click: () => captureView(),
       },
+      // Ghost icon (CSS), crossed out while ghosts are hidden (see syncGhostsButton).
+      ghosts: {
+        text: '',
+        hint: 'Hide all ghosts',
+        click: () => updateSettings({ showGhosts: !getSettings().showGhosts }),
+      },
       // Arrow icons (CSS); disabled when there is nothing to undo/redo (see updateHistoryButtons).
       undo: { text: '', hint: 'Undo', click: () => undoLastChange() },
       redo: { text: '', hint: 'Redo', click: () => redoLastChange() },
@@ -404,6 +410,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       // The list is an agenda of what's ahead: hide events that are already over (ongoing ones
       // stay, and full-day events stay until the day ends).
       if (currentView.startsWith('list')) events = upcomingOnly(events, new Date());
+      if (!getSettings().showGhosts) events = events.filter((e) => !isGhostEvent(e));
       const subscribed = new Set(
         getCalendarState()
           .calendars.filter((c) => subscriptionOf(c.fileId))
@@ -476,6 +483,17 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     btn.setAttribute('aria-haspopup', 'menu');
   }
 
+  /** The ghosts button: pressed (crossed out) while ghosts are hidden. */
+  function syncGhostsButton(): void {
+    const shown = getSettings().showGhosts;
+    for (const button of host.querySelectorAll<HTMLButtonElement>('.fc-ghosts-button')) {
+      button.title = shown ? 'Hide all ghosts' : 'Show all ghosts';
+      button.setAttribute('aria-label', button.title);
+      button.setAttribute('aria-pressed', String(!shown));
+    }
+  }
+  syncGhostsButton();
+
   /** Enables undo/redo only when there is something to undo/redo and changes can be saved. */
   function updateHistoryButtons(): void {
     const history = getHistory();
@@ -513,6 +531,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     calendar.setOption('slotLabelFormat', slotLabelFormat());
     // The toolbars were rebuilt.
     updateHistoryButtons();
+    syncGhostsButton();
     syncViewMenuButton();
   };
   narrow.addEventListener('change', onResize);
@@ -522,9 +541,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     if (s.timeZone !== last.timeZone) calendar.setOption('timeZone', s.timeZone);
     if (s.weekStartsOn !== last.weekStartsOn) calendar.setOption('firstDay', s.weekStartsOn);
     // Colors, visibility and ghosts only affect events.
-    if (s.calendars !== last.calendars || s.ghostEvents !== last.ghostEvents) {
+    if (
+      s.calendars !== last.calendars ||
+      s.ghostEvents !== last.ghostEvents ||
+      s.showGhosts !== last.showGhosts
+    ) {
       calendar.refetchEvents();
     }
+    if (s.showGhosts !== last.showGhosts) syncGhostsButton();
     last = s;
   });
   let lastCalendars = getCalendarState().calendars;

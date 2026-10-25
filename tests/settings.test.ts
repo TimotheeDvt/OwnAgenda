@@ -102,6 +102,12 @@ describe('ghost events', () => {
     ).toEqual([ghost]);
     expect(normalizeSettings({}).ghostEvents).toEqual([]);
   });
+
+  it('shows ghosts unless hidden', () => {
+    expect(normalizeSettings({}).showGhosts).toBe(true);
+    expect(normalizeSettings({ showGhosts: 'no' }).showGhosts).toBe(true);
+    expect(normalizeSettings({ showGhosts: false }).showGhosts).toBe(false);
+  });
 });
 
 describe('calendar icons', () => {
