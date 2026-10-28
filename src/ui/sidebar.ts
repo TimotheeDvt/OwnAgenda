@@ -1,3 +1,4 @@
+import { storage } from '../storage';
 import {
   getCalendarState,
   onCalendarsChange,
@@ -31,6 +32,8 @@ export interface SidebarActions {
   onPickSearchResult(event: AgendaEvent): void;
   onToggleOfflineCache(enabled: boolean): void;
   onShowShortcuts(): void;
+  onExportSettings(): void;
+  onImportSettings(): void;
 }
 
 export interface Sidebar {
@@ -101,7 +104,7 @@ function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElemen
     const loading = state.status === 'loading';
     const reload = iconButton(
       'refresh',
-      'Reload all calendars of the folder from Google Drive',
+      `Reload all calendars of the folder from ${storage().label}`,
       actions.onReload,
     );
     reload.disabled = loading;
@@ -113,7 +116,7 @@ function renderFolder(actions: SidebarActions, state: CalendarState): HTMLElemen
   folderIcon.innerHTML = ICONS.folder;
   folderIcon.setAttribute('role', 'img');
   folderIcon.setAttribute('aria-label', 'Folder');
-  folderIcon.title = 'Google Drive folder';
+  folderIcon.title = `${storage().label} folder`;
 
   const pathLabel = el('span', 'folder-path', path || 'Not set');
   pathLabel.title = path;
@@ -207,7 +210,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     title.appendChild(
       statusIcon(
         'refresh',
-        state.calendars.length ? 'Updating from Google Drive...' : 'Loading...',
+        state.calendars.length ? `Updating from ${storage().label}...` : 'Loading...',
         true,
       ),
     );
@@ -316,7 +319,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
       'refresh',
       subscription
         ? `Update ${calendar.displayName} from ${hostOf(subscription.url)}`
-        : `Refresh ${calendar.displayName} from Google Drive`,
+        : `Refresh ${calendar.displayName} from ${storage().label}`,
       () => actions.onRefreshCalendar(calendar.fileId),
     );
     refresh.disabled = refreshing || state.status === 'loading' || state.fromCache;
@@ -358,7 +361,7 @@ function renderFooter(actions: SidebarActions): HTMLElement[] {
     'database',
     `Offline copy on this device: ${offlineOn ? 'ON' : 'OFF'}\n` +
       'Keeps your calendars in this browser so the agenda opens instantly and stays readable ' +
-      'when Google Drive is unreachable. Signing out deletes it.\n' +
+      `when ${storage().label} is unreachable. Signing out deletes it.\n` +
       `Click to turn it ${offlineOn ? 'off' : 'on'}.`,
     () => actions.onToggleOfflineCache(!offlineOn),
   );
@@ -377,12 +380,24 @@ function renderFooter(actions: SidebarActions): HTMLElement[] {
   // A dot shows that a proxy is set.
   proxyButton.classList.toggle('is-active', Boolean(proxy));
 
+  // Moving to another storage: settings go with you (calendars are matched by file name).
+  const exportButton = iconButton(
+    'download',
+    'Export settings to a file (colors, icons, order, views...; not the folder)',
+    actions.onExportSettings,
+  );
+  const importButton = iconButton(
+    'upload',
+    'Import settings from an exported file',
+    actions.onImportSettings,
+  );
+  const tools = [offline, proxyButton, exportButton, importButton, shortcuts];
+
   // Dev server only (`npm run dev`): left out of production builds.
   if (import.meta.env.DEV) {
-    const debug = iconButton('bug', 'Debug: show the settings file', showSettingsDebug);
-    return [offline, proxyButton, shortcuts, debug];
+    tools.push(iconButton('bug', 'Debug: show the settings file', showSettingsDebug));
   }
-  return [offline, proxyButton, shortcuts];
+  return tools;
 }
 
 export function mountSidebar(host: HTMLElement, actions: SidebarActions): Sidebar {

@@ -1,4 +1,4 @@
-import { getAccessToken, refreshAccessToken } from '../../auth/auth';
+import { getAccessToken, refreshAccessToken } from '../../auth/googleAuth';
 import { DRIVE_UPLOAD_API } from '../../config';
 
 export class DriveError extends Error {

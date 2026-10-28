@@ -367,6 +367,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     }
     if (!on) document.body.classList.remove('is-copy-drag');
   };
+
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
   const fromUrl = readUrlPosition();
   let currentView: string = fromUrl.view ?? initial.defaultView;

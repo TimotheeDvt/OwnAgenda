@@ -13,6 +13,8 @@ interface StoredFile {
 export class FakeStorage implements StorageProvider {
   readonly id = 'fake';
   readonly label = 'Fake storage';
+  readonly folderHelpHtml = 'Folder path.';
+  readonly folderPlaceholder = 'folder';
   readonly files = new Map<string, StoredFile>();
   uploads: string[] = [];
   settings: unknown = null;

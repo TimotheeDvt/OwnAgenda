@@ -1,77 +1,43 @@
-import { GIS_SCRIPT_URL, GOOGLE_CLIENT_ID, SCOPES, TOKEN_EXPIRY_MARGIN_MS } from '../config';
+// Sign-in for the storage the user chose: Google Drive (googleAuth.ts) or a Solid pod
+// (solidAuth.ts). The rest of the app only uses this module, whatever the storage is.
 
-type Prompt = '' | 'consent' | 'select_account';
+import { GOOGLE_CLIENT_ID } from '../config';
+import { setStorageProvider } from '../storage';
+import { googleDriveProvider } from '../storage/googleDrive';
+import { solidProvider } from '../storage/solid';
+import * as google from './googleAuth';
+import * as solid from './solidAuth';
+import { storageGet, storageSet, type AuthListener, type AuthState } from './types';
 
-interface StoredToken {
-  accessToken: string;
-  expiresAt: number;
-}
+export { AuthError, type AuthListener, type AuthState } from './types';
 
-/**
- * - signedIn: a valid access token is available
- * - expired: someone signed in on this device before, but the token expired (Google access
- *   tokens last about an hour and, without a backend, can't be renewed without a popup). The app
- *   stays usable read-only and offers a one-tap "Reconnect".
- * - signedOut: nobody is signed in on this device
- */
-export type AuthState = 'signedIn' | 'expired' | 'signedOut';
-export type AuthListener = (state: AuthState) => void;
+export type SignInMethod = 'google-drive' | 'solid';
 
-// localStorage (not sessionStorage) so the session survives closing the installed app.
-const TOKEN_STORAGE_KEY = 'ics-agenda.token';
-const ACCOUNT_STORAGE_KEY = 'ics-agenda.account';
+const METHOD_STORAGE_KEY = 'ics-agenda.provider';
 
-let tokenClient: google.accounts.oauth2.TokenClient | null = null;
-let token: StoredToken | null = null;
-let account: string | null = null;
+let method: SignInMethod | null = null;
 let lastState: AuthState = 'signedOut';
-let expiryTimer: ReturnType<typeof setTimeout> | null = null;
-let pending: {
-  promise: Promise<string>;
-  resolve: (token: string) => void;
-  reject: (err: Error) => void;
-} | null = null;
 const listeners = new Set<AuthListener>();
 
-export class AuthError extends Error {
-  override name = 'AuthError';
+/** Google sign-in needs an OAuth client ID at build time; Solid needs nothing. */
+export function isGoogleAvailable(): boolean {
+  return !!GOOGLE_CLIENT_ID;
 }
 
-function storageGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+function setMethod(next: SignInMethod | null): void {
+  method = next;
+  storageSet(METHOD_STORAGE_KEY, next);
+  if (next) setStorageProvider(next === 'solid' ? solidProvider : googleDriveProvider);
 }
 
-function storageSet(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Storage unavailable (private mode, blocked site data): nothing is remembered.
-  }
-}
-
-function readStoredToken(): StoredToken | null {
-  try {
-    const parsed = JSON.parse(storageGet(TOKEN_STORAGE_KEY) ?? 'null') as StoredToken | null;
-    return parsed && typeof parsed.accessToken === 'string' && typeof parsed.expiresAt === 'number'
-      ? parsed
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function isValid(t: StoredToken | null): t is StoredToken {
-  return !!t && t.expiresAt - TOKEN_EXPIRY_MARGIN_MS > Date.now();
+export function getSignInMethod(): SignInMethod | null {
+  return method;
 }
 
 export function getAuthState(): AuthState {
-  if (isValid(token)) return 'signedIn';
-  return account ? 'expired' : 'signedOut';
+  if (method === 'solid') return solid.getSolidAuthState();
+  if (method === 'google-drive') return google.getAuthState();
+  return 'signedOut';
 }
 
 function emitIfChanged(): void {
@@ -81,178 +47,82 @@ function emitIfChanged(): void {
   listeners.forEach((l) => l(state));
 }
 
-function setToken(value: StoredToken | null): void {
-  token = value;
-  storageSet(TOKEN_STORAGE_KEY, value ? JSON.stringify(value) : null);
-  // Switch to "expired" by itself when the token runs out while the app is open.
-  if (expiryTimer) clearTimeout(expiryTimer);
-  expiryTimer = value
-    ? setTimeout(emitIfChanged, Math.max(0, value.expiresAt - TOKEN_EXPIRY_MARGIN_MS - Date.now()))
-    : null;
-  emitIfChanged();
-}
-
-/** Remembers which Google account is used, so later sign-ins skip the account chooser. */
-export function rememberAccount(email: string): void {
-  account = email;
-  storageSet(ACCOUNT_STORAGE_KEY, email);
-}
-
-export function rememberedAccount(): string | null {
-  return account;
-}
-
-function loadGisScript(): Promise<void> {
-  if (typeof google !== 'undefined' && google.accounts?.oauth2) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = GIS_SCRIPT_URL;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      script.remove();
-      reject(new AuthError("Can't reach Google sign-in. Check your internet connection."));
-    };
-    document.head.appendChild(script);
-  });
-}
-
-function handleTokenResponse(response: google.accounts.oauth2.TokenResponse): void {
-  const current = pending;
-  pending = null;
-  if (response.error || !response.access_token) {
-    current?.reject(
-      new AuthError(response.error_description || response.error || 'Sign-in failed.'),
-    );
-    return;
-  }
-  if (!google.accounts.oauth2.hasGrantedAllScopes(response, ...SCOPES)) {
-    current?.reject(
-      new AuthError('Google Drive access was not granted. Please allow all requested permissions.'),
-    );
-    return;
-  }
-  setToken({
-    accessToken: response.access_token,
-    expiresAt: Date.now() + Number(response.expires_in) * 1000,
-  });
-  current?.resolve(response.access_token);
-}
-
-function handleClientError(error: google.accounts.oauth2.ClientConfigError): void {
-  const current = pending;
-  pending = null;
-  const message =
-    error.type === 'popup_failed_to_open'
-      ? 'The Google sign-in popup was blocked. Allow popups for this site and try again.'
-      : error.type === 'popup_closed'
-        ? 'The Google sign-in window was closed.'
-        : (error.message ?? 'Sign-in failed.');
-  current?.reject(new AuthError(message));
-}
-
-/** Loads Google Identity Services on first use (it may be unreachable when offline). */
-async function ensureTokenClient(): Promise<google.accounts.oauth2.TokenClient> {
-  if (tokenClient) return tokenClient;
-  if (!GOOGLE_CLIENT_ID) {
-    throw new AuthError('VITE_GOOGLE_CLIENT_ID is not set. See README for setup.');
-  }
-  await loadGisScript();
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: SCOPES.join(' '),
-    callback: handleTokenResponse,
-    error_callback: handleClientError,
-  });
-  return tokenClient;
+function storedMethod(): SignInMethod | null {
+  const stored = storageGet(METHOD_STORAGE_KEY);
+  if (stored === 'solid') return 'solid';
+  if (!isGoogleAvailable()) return null;
+  if (stored === 'google-drive') return 'google-drive';
+  // Signed in before Solid support existed: that was Google.
+  return google.rememberedAccount() ? 'google-drive' : null;
 }
 
 /**
- * Restores the remembered account and token. Never needs the network: when offline, the app can
- * still start from its offline copy. Google's script is loaded in the background.
+ * Restores the session of the storage used last on this device. Google never needs the
+ * network here; Solid completes a sign-in redirect, or renews the session when online.
  */
-export function initAuth(): void {
-  if (!GOOGLE_CLIENT_ID) {
-    throw new AuthError('VITE_GOOGLE_CLIENT_ID is not set. See README for setup.');
-  }
-  account = storageGet(ACCOUNT_STORAGE_KEY);
-  const stored = readStoredToken();
-  setToken(isValid(stored) ? stored : null);
+export async function initAuth(): Promise<void> {
+  if (isGoogleAvailable()) google.initAuth();
+  // Coming back from the Solid provider wins over whatever was used before.
+  setMethod(solid.isSolidRedirect() ? 'solid' : storedMethod());
+  await solid.initSolidAuth(method === 'solid');
+  // A finished Solid redirect that failed leaves nobody signed in.
+  if (method === 'solid' && solid.getSolidAuthState() === 'signedOut') setMethod(null);
   lastState = getAuthState();
-  // Warm up so the first click on "Sign in"/"Reconnect" opens the popup right away (popups must
-  // open during the click, so the script should already be there).
-  ensureTokenClient().catch(() => {
-    // Offline: retried on the next sign-in attempt.
+  google.onAuthChange(() => {
+    if (method === 'google-drive') emitIfChanged();
+  });
+  solid.onSolidAuthChange(() => {
+    if (method === 'solid') emitIfChanged();
   });
 }
 
-function requestToken(prompt: Prompt): Promise<string> {
-  // Coalesce concurrent requests (e.g. several Drive calls hitting 401 at once).
-  if (pending) return pending.promise;
-  let resolve!: (t: string) => void;
-  let reject!: (e: Error) => void;
-  const promise = new Promise<string>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  pending = { promise, resolve, reject };
-  const open = (client: google.accounts.oauth2.TokenClient) =>
-    // `hint` preselects the remembered account: no account chooser, and no consent screen
-    // once access was granted, so the popup just flashes and closes.
-    client.requestAccessToken({ prompt, ...(account ? { hint: account } : {}) });
-  if (tokenClient) open(tokenClient);
-  else {
-    ensureTokenClient()
-      .then(open)
-      .catch((err: Error) => {
-        pending = null;
-        reject(err);
-      });
-  }
-  return promise;
+/** Error of a Solid sign-in redirect that just failed, to show once. */
+export function takeSignInError(): string | null {
+  return solid.takeSolidRedirectError();
+}
+
+/** True when signing in replaces the page (Solid): unsaved changes must be handled first. */
+export function signInRedirects(next: SignInMethod | null = method): boolean {
+  return next === 'solid';
 }
 
 /**
- * Interactive sign-in, or "Reconnect" after the session expired. Must be called from a click so
- * the popup isn't blocked. With a remembered account it skips the account chooser.
+ * Interactive sign-in with `options.method`, or "Reconnect" with the current one. For Google it
+ * must be called from a click (popup), with nothing awaited before. For Solid, `options.provider`
+ * is the provider or WebID typed by the user (default: the one used last).
  */
-export function signIn(): Promise<string> {
-  return requestToken(account ? '' : 'select_account');
+export async function signIn(
+  options: { method?: SignInMethod; provider?: string } = {},
+): Promise<void> {
+  const next = options.method ?? method ?? 'google-drive';
+  if (next !== method) setMethod(next);
+  if (next === 'solid') await solid.signInSolid(options.provider);
+  else await google.signIn();
+}
+
+/** The Solid provider used last on this device, to prefill the sign-in form. */
+export function lastSolidProvider(): string | null {
+  return solid.lastSolidIssuer();
 }
 
 /** Signs out and forgets the account on this device. */
 export function signOut(): void {
-  const current = token;
-  account = null;
-  storageSet(ACCOUNT_STORAGE_KEY, null);
-  setToken(null);
-  if (current && typeof google !== 'undefined' && google.accounts?.oauth2) {
-    google.accounts.oauth2.revoke(current.accessToken);
-  }
+  if (method === 'solid') solid.signOutSolid();
+  else if (method === 'google-drive') google.signOut();
+  storageSet(METHOD_STORAGE_KEY, null);
+  method = null;
+  emitIfChanged();
 }
 
-export function isSignedIn(): boolean {
-  return isValid(token);
+/** Remembers the account in use (Google: skips the account chooser on later sign-ins). */
+export function rememberAccount(email: string): void {
+  if (method === 'google-drive') google.rememberAccount(email);
 }
 
-/** Returns a valid access token, trying to renew it when it has expired. */
-export async function getAccessToken(): Promise<string> {
-  if (isValid(token)) return token.accessToken;
-  return refreshAccessToken();
-}
-
-/**
- * Tries to get a new token without a click (after a 401 or expiry). Browsers usually block that
- * popup; the session then becomes "expired" (not signed out: data and unsaved changes are kept)
- * until the user taps Reconnect.
- */
-export async function refreshAccessToken(): Promise<string> {
-  try {
-    return await requestToken('');
-  } catch {
-    setToken(null);
-    throw new AuthError('Your Google session expired. Tap "Reconnect" to continue.');
-  }
+export function rememberedAccount(): string | null {
+  if (method === 'solid') return solid.rememberedSolidAccount();
+  if (method === 'google-drive') return google.rememberedAccount();
+  return null;
 }
 
 export function onAuthChange(listener: AuthListener): () => void {

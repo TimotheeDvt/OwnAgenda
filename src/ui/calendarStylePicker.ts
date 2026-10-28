@@ -63,7 +63,7 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
   nameInput.value = calendarName;
   nameInput.setAttribute('aria-label', 'Calendar name');
   nameInput.title =
-    'Stored in the calendar file (X-WR-CALNAME); the file name on Google Drive stays the same.';
+    'Stored in the calendar file (X-WR-CALNAME); the file name in your storage stays the same.';
   const commitName = () => {
     const next = nameInput.value.trim();
     if (!next) nameInput.value = calendarName;

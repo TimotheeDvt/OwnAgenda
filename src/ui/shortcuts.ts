@@ -24,7 +24,7 @@ export const SHORTCUTS: [keys: string, description: string][] = [
   ['/', 'Search events'],
   ['Ctrl + Z', 'Undo the last change'],
   ['Ctrl + Y / Ctrl + Shift + Z', 'Redo'],
-  ['Shift + R', 'Reload all calendars from Drive'],
+  ['Shift + R', 'Reload all calendars from storage'],
   ['?', 'Show this help'],
   ['Esc', 'Close a dialog'],
 ];

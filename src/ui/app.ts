@@ -1,13 +1,18 @@
 import {
   getAuthState,
   initAuth,
+  isGoogleAvailable,
+  lastSolidProvider,
   onAuthChange,
   rememberAccount,
   rememberedAccount,
   signIn,
+  signInRedirects,
   signOut,
+  takeSignInError,
   type AuthState,
 } from '../auth/auth';
+import { SOLID_DEFAULT_ISSUER } from '../config';
 import { storage, type StorageUser } from '../storage';
 import {
   clearCalendars,
@@ -37,6 +42,7 @@ import {
 } from '../store/calendarStore';
 import { pruneGhostEvents } from '../store/ghostEvents';
 import { clearSnapshot, readSnapshot, writeSnapshot } from '../store/offlineCache';
+import { exportSettings, importSettings } from '../store/settingsTransfer';
 import {
   applyCachedSettings,
   flushSettings,
@@ -275,16 +281,23 @@ function setDrawer(open: boolean): void {
 // Screens
 
 function renderSignedOut(): void {
-  layout.user.replaceChildren(button('Sign in with Google', 'btn btn-primary', handleSignIn));
+  layout.user.replaceChildren();
   layout.sidebar.hidden = true;
   layout.menu.hidden = true;
   setDrawer(false);
   const welcome = document.createElement('div');
   welcome.className = 'welcome';
   welcome.innerHTML = `
-    <h2>Your .ics calendars, from Google Drive</h2>
-    <p>Sign in with Google to load every <code>.ics</code> file from a folder in your Drive.</p>`;
-  welcome.appendChild(button('Sign in with Google', 'btn btn-primary', handleSignIn));
+    <h2>Your .ics calendars, from your own storage</h2>
+    <p>Sign in to load every <code>.ics</code> file from a folder in your Solid pod or your
+    Google Drive.</p>`;
+  const actions = document.createElement('div');
+  actions.className = 'welcome-actions';
+  actions.appendChild(button('Sign in with Solid', 'btn btn-primary', handleSolidSignIn));
+  if (isGoogleAvailable()) {
+    actions.appendChild(button('Sign in with Google', 'btn', handleGoogleSignIn));
+  }
+  welcome.appendChild(actions);
   layout.main.replaceChildren(welcome);
 }
 
@@ -298,7 +311,7 @@ function renderReconnect(): void {
   title.textContent = 'Welcome back';
   const text = document.createElement('p');
   text.textContent = navigator.onLine
-    ? `Reconnect to ${rememberedAccount() ?? 'your Google account'} to load your calendars.`
+    ? `Reconnect to ${rememberedAccount() ?? `your ${storage().label}`} to load your calendars.`
     : "You're offline and there is no copy of your calendars on this device yet. " +
       'Connect to the internet to load them.';
   box.append(title, text);
@@ -331,7 +344,7 @@ async function confirmDiscard(action: string, dirty = hasUnsavedChanges()): Prom
   if (!dirty) return true;
   const choice = await chooseOption(
     'Unsaved changes',
-    `Some changes haven't been saved to Google Drive yet. ${action} anyway and lose them?`,
+    `Some changes haven't been saved to your ${storage().label} yet. ${action} anyway and lose them?`,
     [
       { value: 'cancel', label: 'Cancel' },
       { value: 'discard', label: 'Discard changes', kind: 'danger' },
@@ -340,9 +353,50 @@ async function confirmDiscard(action: string, dirty = hasUnsavedChanges()): Prom
   return choice === 'discard';
 }
 
+/** "Reconnect" with the storage used before. */
 async function handleSignIn(): Promise<void> {
   try {
+    // Solid reconnects by leaving the page: settle unsaved work first. Google opens a popup,
+    // which must happen right away during the click (nothing awaited before).
+    if (signInRedirects()) {
+      if (!(await confirmDiscard('Reconnect'))) return;
+      await flushSettings().catch(() => {});
+    }
     await signIn();
+  } catch (err) {
+    showToast(errorMessage(err), 'error');
+  }
+}
+
+async function handleGoogleSignIn(): Promise<void> {
+  try {
+    await signIn({ method: 'google-drive' });
+  } catch (err) {
+    showToast(errorMessage(err), 'error');
+  }
+}
+
+async function handleSolidSignIn(): Promise<void> {
+  const values = await promptForm({
+    title: 'Sign in with Solid',
+    descriptionHtml:
+      'Enter your Solid provider (where you created your pod), or your WebID. You will be ' +
+      'sent to its sign-in page, then back here. No pod yet? Create one for free at ' +
+      '<a href="https://solidproject.org/users/get-a-pod" target="_blank" rel="noopener">' +
+      'solidproject.org</a>.',
+    fields: [
+      {
+        name: 'provider',
+        label: 'Provider or WebID',
+        value: lastSolidProvider() ?? SOLID_DEFAULT_ISSUER,
+        placeholder: SOLID_DEFAULT_ISSUER,
+      },
+    ],
+    submitLabel: 'Continue',
+  });
+  if (!values?.provider) return;
+  try {
+    await signIn({ method: 'solid', provider: values.provider });
   } catch (err) {
     showToast(errorMessage(err), 'error');
   }
@@ -369,7 +423,7 @@ async function changeFolder(firstRun = false): Promise<void> {
   await loadCalendars(path);
 }
 
-/** Re-lists the folder and downloads every calendar again from Drive. */
+/** Re-lists the folder and downloads every calendar again from storage. */
 async function reloadAll(): Promise<void> {
   const { folderPath } = getSettings();
   if (!folderPath || getCalendarState().status === 'loading') return;
@@ -383,7 +437,7 @@ async function reloadAll(): Promise<void> {
   await loadCalendars(folderPath);
   const state = getCalendarState();
   if (state.status === 'ready' && !state.fromCache) {
-    showToast(`${state.calendars.length} calendar(s) reloaded from Google Drive.`, 'success');
+    showToast(`${state.calendars.length} calendar(s) reloaded from ${storage().label}.`, 'success');
   }
 }
 
@@ -407,7 +461,7 @@ async function refreshOne(fileId: string): Promise<void> {
     const result = await refreshCalendar(fileId);
     showToast(
       result === 'updated'
-        ? `"${calendar.displayName}" was updated from Google Drive.`
+        ? `"${calendar.displayName}" was updated from ${storage().label}.`
         : `"${calendar.displayName}" is up to date.`,
       'success',
     );
@@ -473,7 +527,7 @@ async function newCalendar(): Promise<void> {
   if (blockedByReadOnly()) return;
   const name = await promptText({
     title: 'New calendar',
-    descriptionHtml: `A new <code>.ics</code> file will be created in your folder on Google Drive.`,
+    descriptionHtml: `A new <code>.ics</code> file will be created in your folder on ${storage().label}.`,
     label: 'Name',
     placeholder: 'Family',
     submitLabel: 'Create',
@@ -506,6 +560,77 @@ async function toggleOfflineCache(enabled: boolean): Promise<void> {
   updateSettings({ offlineCache: enabled });
   if (enabled) scheduleSnapshot();
   else await clearSnapshot();
+}
+
+// Settings export / import
+
+/** The calendars of the loaded folder, to match settings by file name. */
+function loadedFiles(): { id: string; name: string }[] | null {
+  const state = getCalendarState();
+  if (state.status !== 'ready') {
+    showToast('Wait until the calendars are loaded.', 'warning');
+    return null;
+  }
+  return state.calendars.map((c) => ({ id: c.fileId, name: c.name }));
+}
+
+function exportSettingsFile(): void {
+  const files = loadedFiles();
+  if (!files) return;
+  const json = JSON.stringify(exportSettings(getSettings(), files), null, 2);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  link.download = `ownagenda-settings-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  showToast('Settings exported (without the folder).', 'success');
+}
+
+function pickJsonFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.addEventListener('change', () => resolve(input.files?.[0] ?? null));
+    input.addEventListener('cancel', () => resolve(null));
+    input.click();
+  });
+}
+
+async function importSettingsFile(): Promise<void> {
+  if (blockedByReadOnly()) return;
+  const files = loadedFiles();
+  if (!files) return;
+  const file = await pickJsonFile();
+  if (!file) return;
+
+  let result: ReturnType<typeof importSettings>;
+  try {
+    result = importSettings(getSettings(), JSON.parse(await file.text()) as unknown, files);
+  } catch (err) {
+    showToast(
+      err instanceof SyntaxError ? 'This file is not valid JSON.' : errorMessage(err),
+      'error',
+    );
+    return;
+  }
+  const { matched, missing } = result;
+  const choice = await chooseOption(
+    'Import settings',
+    `Replace your settings with the ones in "${file.name}"? Your folder stays the same. ` +
+      `${matched.length} calendar(s) of the file match a file in this folder.` +
+      (missing.length
+        ? ` Not found here (their settings are skipped): ${missing.join(', ')}.`
+        : ''),
+    [
+      { value: 'cancel', label: 'Cancel' },
+      { value: 'import', label: 'Import', kind: 'primary' },
+    ],
+  );
+  if (choice !== 'import') return;
+  updateSettings(result.settings);
+  applyTheme(result.settings.theme);
+  showToast(`Settings imported (${matched.length} calendar(s) matched).`, 'success');
 }
 
 // Offline copy
@@ -567,6 +692,8 @@ function mountMain(): void {
     onPickSearchResult: pickSearchResult,
     onToggleOfflineCache: (enabled) => void toggleOfflineCache(enabled),
     onShowShortcuts: showShortcutsHelp,
+    onExportSettings: exportSettingsFile,
+    onImportSettings: () => void importSettingsFile(),
   });
   layout.main.replaceChildren();
   calendarView = mountCalendarView(layout.main);
@@ -718,11 +845,12 @@ function onAuthStateChange(state: AuthState): void {
 
 function setupSaving(): void {
   setConflictHandler(async (calendar) => {
+    const where = storage().label;
     const choice = await chooseOption(
-      'Calendar changed on Drive',
+      `Calendar changed on ${where}`,
       `"${calendar.displayName}" was changed somewhere else since it was loaded. ` +
-        'Reload it from Drive (your changes to this calendar are lost), or overwrite the ' +
-        'Drive version with yours?',
+        `Reload it from ${where} (your changes to this calendar are lost), or overwrite the ` +
+        `${where} version with yours?`,
       [
         { value: 'later', label: 'Decide later' },
         { value: 'reload', label: 'Reload' },
@@ -811,11 +939,13 @@ export async function startApp(root: HTMLElement): Promise<void> {
   setupShortcuts();
 
   try {
-    initAuth();
+    await initAuth();
   } catch (err) {
     renderFatal(errorMessage(err));
     return;
   }
+  const signInError = takeSignInError();
+  if (signInError) showToast(`Could not sign in: ${signInError}`, 'error');
 
   onAuthChange(onAuthStateChange);
   // Network changes switch between read-only and normal mode.

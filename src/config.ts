@@ -16,6 +16,16 @@ export const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 export const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 export const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 
+/** Solid provider suggested at sign-in (the free community server run by the Solid Project). */
+export const SOLID_DEFAULT_ISSUER = 'https://solidcommunity.net';
+/** Name shown on the Solid provider's consent screen. */
+export const SOLID_CLIENT_NAME = 'OwnAgenda';
+/**
+ * Settings file in a Solid pod, relative to the pod root. /settings/ is the usual private
+ * folder for app preferences (only the owner can read it).
+ */
+export const SOLID_SETTINGS_PATH = 'settings/ownagenda.json';
+
 export const SETTINGS_FILE_NAME = 'settings.json';
 export const SETTINGS_VERSION = 1;
 export const SETTINGS_SAVE_DEBOUNCE_MS = 1000;

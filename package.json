@@ -20,12 +20,15 @@
     "@fullcalendar/interaction": "^6.1.22",
     "@fullcalendar/list": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
+    "@inrupt/solid-client-authn-browser": "5.0.1",
     "@mdi/font": "^7.4.47",
     "html-to-image": "^1.11.13",
-    "ical.js": "^2.2.1"
+    "ical.js": "^2.2.1",
+    "n3": "2.13.12"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/n3": "1.26.6",
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",

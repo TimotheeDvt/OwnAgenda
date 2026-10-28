@@ -430,6 +430,13 @@ code {
   line-height: 1.5;
 }
 
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 /* Folder dialog */
 
 .folder-dialog,

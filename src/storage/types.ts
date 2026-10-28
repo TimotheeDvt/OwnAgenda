@@ -1,6 +1,6 @@
 /**
- * Where calendars and settings are stored. The app only talks to this interface; the Google Drive
- * implementation is in googleDrive/.
+ * Where calendars and settings are stored. The app only talks to this interface; the
+ * implementations are in googleDrive/ and solid/.
  *
  * File IDs and folder IDs are opaque strings chosen by the provider.
  */
@@ -9,6 +9,10 @@ export interface StorageProvider {
   readonly id: string;
   /** Name shown to the user, e.g. "Google Drive". */
   readonly label: string;
+  /** Explains the folder path syntax when asking for it (HTML). */
+  readonly folderHelpHtml: string;
+  /** Example folder path. */
+  readonly folderPlaceholder: string;
 
   /**
    * Finds the folder at `folderPath` (provider-specific syntax, e.g. "Agendas/ics") and lists the

@@ -202,7 +202,7 @@ export async function loadCalendars(folderPath: string): Promise<void> {
         status: 'ready',
         readOnly: state.readOnly ?? 'offline',
         warnings: [
-          `Could not reach Google Drive (${errorMessage(err)}). Showing the copy saved on this device.`,
+          `Could not reach ${storage().label} (${errorMessage(err)}). Showing the copy saved on this device.`,
         ],
       });
     } else {
@@ -335,7 +335,7 @@ function requireCalendar(fileId: string): CalendarFile {
 export function readOnlyMessage(reason: ReadOnlyReason): string {
   return reason === 'offline'
     ? "You're offline: the calendars are read-only until the connection is back."
-    : 'Your Google session expired: reconnect to make changes.';
+    : `Your ${storage().label} session expired: reconnect to make changes.`;
 }
 
 /** Throws while changes are impossible (offline, or the session expired). */
@@ -571,7 +571,7 @@ export async function createCalendar(name: string): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Please enter a name.');
   assertWritable();
-  if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
+  if (!state.folderId) throw new Error(`Load a folder from ${storage().label} first.`);
   const generation = loadGeneration;
   const content = serializeCalendar(newCalendarComponent(trimmed));
   const meta: FileMeta = await storage().create(state.folderId, fileNameFor(trimmed), content);
@@ -612,7 +612,7 @@ export async function subscribeCalendar(name: string, link: string): Promise<str
   if (!trimmed) throw new Error('Please enter a name.');
   const url = normalizeSubscriptionUrl(link);
   assertWritable();
-  if (!state.folderId) throw new Error('Load a folder from Google Drive first.');
+  if (!state.folderId) throw new Error(`Load a folder from ${storage().label} first.`);
   const folderId = state.folderId;
   const generation = loadGeneration;
   const text = await fetchRemoteCalendar(url, getSettings().corsProxy);

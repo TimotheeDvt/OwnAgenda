@@ -24,6 +24,10 @@ const toMeta = ({ id, name, modifiedTime }: DriveFileMeta): FileMeta => ({
 export const googleDriveProvider: StorageProvider = {
   id: 'google-drive',
   label: 'Google Drive',
+  folderHelpHtml:
+    'Path of the Google Drive folder that contains your <code>.ics</code> files, starting ' +
+    'from My Drive. Use <code>/</code> between folders.',
+  folderPlaceholder: 'Agendas/ics',
 
   async listFiles(folderPath) {
     const folderId = await resolvePath(folderPath);

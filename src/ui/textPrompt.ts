@@ -1,3 +1,5 @@
+import { storage } from '../storage';
+
 export interface PromptField {
   name: string;
   label: string;
@@ -109,16 +111,14 @@ export async function promptText(options: TextPromptOptions): Promise<string | n
   return values?.value || null;
 }
 
-/** Asks for the Drive folder path that holds the .ics files. */
+/** Asks for the storage folder path that holds the .ics files. */
 export async function promptFolderPath(current: string, firstRun = false): Promise<string | null> {
   const value = await promptText({
     title: firstRun ? 'Where are your calendars?' : 'Change folder',
-    descriptionHtml:
-      'Path of the Google Drive folder that contains your <code>.ics</code> files, starting ' +
-      'from My Drive. Use <code>/</code> between folders.',
+    descriptionHtml: storage().folderHelpHtml,
     label: 'Folder path',
     value: current,
-    placeholder: 'Agendas/ics',
+    placeholder: storage().folderPlaceholder,
   });
   return value?.replace(/^\/+|\/+$/g, '') || null;
 }
