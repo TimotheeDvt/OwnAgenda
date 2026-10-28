@@ -771,6 +771,19 @@ code {
   cursor: pointer;
 }
 
+/* Week/day views: every timed event (ghost or not) takes the whole column width, with the same
+   margin on each side; overlapping events are stacked instead of side by side. FullCalendar sets
+   the side-by-side positions inline, hence !important. */
+.calendar-host.fc .fc-timegrid-col-events {
+  margin: 0;
+}
+
+.calendar-host.fc .fc-timegrid-event-harness,
+.calendar-host.fc .fc-timegrid-bg-harness:has(.is-ghost) {
+  left: 3px !important;
+  right: 3px !important;
+}
+
 .calendar-host.fc .fc-bg-event.is-ghost .fc-event-title {
   margin: 4px 6px;
   font-style: normal;
