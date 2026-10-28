@@ -307,7 +307,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     if (subscription) {
       const host = hostOf(subscription.url);
       const badge = el('span', 'subscription-badge');
-      badge.innerHTML = ICONS.link;
+      badge.innerHTML = ICONS.globe;
       badge.setAttribute('role', 'img');
       badge.setAttribute('aria-label', 'Subscribed calendar');
       badge.title = `Subscribed to ${host} (read-only)\n${lastUpdated}`;
