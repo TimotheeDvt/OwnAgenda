@@ -93,6 +93,15 @@ describe('Solid storage', () => {
     expect(await solidProvider.download(files[1]!.id)).toBe('W');
   });
 
+  it('explains a network failure instead of "Failed to fetch"', async () => {
+    pod.put(`${POD}calendars/work.ics`, 'W');
+    const { files } = await solidProvider.listFiles('calendars');
+    setSolidFetch(() => Promise.reject(new TypeError('Failed to fetch')));
+    await expect(solidProvider.download(files[0]!.id)).rejects.toThrow(
+      /Could not reach work\.ics on your pod.*permissions/,
+    );
+  });
+
   it('explains when the folder does not exist', async () => {
     await expect(solidProvider.listFiles('missing')).rejects.toThrow(
       'Folder "missing" was not found in your pod.',

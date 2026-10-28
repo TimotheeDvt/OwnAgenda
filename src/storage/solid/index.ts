@@ -34,9 +34,32 @@ function describe(res: Response, url: string): string {
   return `Solid pod error ${res.status}: ${res.statusText || 'request failed'} (${url})`;
 }
 
+/**
+ * The browser only says "Failed to fetch" when a request gets no readable answer: no network,
+ * the pod being down, or a refusal the browser hides from the page. Say what to check instead.
+ */
+function unreachable(url: string): SolidError {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return new SolidError("You're offline.", 0);
+  }
+  return new SolidError(
+    `Could not reach ${nameOf(url) || url} on your pod. If the pod opens in your browser, check ` +
+      "the folder's permissions (.acl): your WebID needs Read and Write, applied to the " +
+      'contained resources too.',
+    0,
+  );
+}
+
 /** fetch() with the Solid session. Throws SolidError for any non-2xx response. */
 async function podFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  const res = await send(url, init);
+  let res: Response;
+  try {
+    res = await send(url, init);
+  } catch (err) {
+    // Not signed in (AuthError) keeps its own message; network failures are TypeErrors.
+    if (err instanceof TypeError) throw unreachable(url);
+    throw err;
+  }
   if (res.status === 401) markSolidSessionExpired();
   if (!res.ok) throw new SolidError(describe(res, url), res.status);
   return res;
