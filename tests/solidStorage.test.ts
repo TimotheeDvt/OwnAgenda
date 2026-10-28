@@ -93,13 +93,98 @@ describe('Solid storage', () => {
     expect(await solidProvider.download(files[1]!.id)).toBe('W');
   });
 
-  it('explains a network failure instead of "Failed to fetch"', async () => {
-    pod.put(`${POD}calendars/work.ics`, 'W');
+  it('loads a folder with one request per file', async () => {
+    for (const name of ['a', 'b', 'c']) pod.put(`${POD}calendars/${name}.ics`, name);
     const { files } = await solidProvider.listFiles('calendars');
-    setSolidFetch(() => Promise.reject(new TypeError('Failed to fetch')));
-    await expect(solidProvider.download(files[0]!.id)).rejects.toThrow(
-      /Could not reach work\.ics on your pod.*permissions/,
-    );
+    const before = pod.requests.length;
+    expect(await Promise.all(files.map((f) => solidProvider.download(f.id)))).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(pod.requests.length).toBe(before);
+    // Profile + folder + 3 files.
+    expect(pod.requests.length).toBe(5);
+  });
+
+  it('sends at most 4 requests at once', async () => {
+    for (let i = 0; i < 12; i++) pod.put(`${POD}calendars/c${i}.ics`, `${i}`);
+    let inFlight = 0;
+    let peak = 0;
+    setSolidFetch(async (url, init) => {
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return pod.fetch(url, init);
+    });
+    const { files } = await solidProvider.listFiles('calendars');
+    expect(files).toHaveLength(12);
+    expect(peak).toBe(4);
+  });
+
+  describe('when the pod drops requests', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      return () => vi.useRealTimers();
+    });
+
+    /** Fails the first `failures` requests to `url` like a dropped request. */
+    function flaky(url: string, failures: number, error: () => Promise<Response>) {
+      let left = failures;
+      setSolidFetch((u, init) => (u === url && left-- > 0 ? error() : pod.fetch(u, init)));
+    }
+    const dropped = () => Promise.reject(new TypeError('Failed to fetch'));
+
+    it('retries reads, and the calendar loads', async () => {
+      pod.put(`${POD}calendars/work.ics`, 'W');
+      flaky(`${POD}calendars/work.ics`, 2, dropped);
+      const listing = solidProvider.listFiles('calendars');
+      await vi.runAllTimersAsync();
+      const { files } = await listing;
+      expect(await solidProvider.download(files[0]!.id)).toBe('W');
+    });
+
+    it('retries busy answers (429)', async () => {
+      pod.put(`${POD}calendars/work.ics`, 'W');
+      flaky(`${POD}calendars/work.ics`, 1, async () => new Response('', { status: 429 }));
+      const listing = solidProvider.listFiles('calendars');
+      await vi.runAllTimersAsync();
+      expect((await listing).files[0]?.modifiedTime).toMatch(/^"\d+"$/);
+    });
+
+    it('keeps listing the other files, and explains the one that failed', async () => {
+      pod.put(`${POD}calendars/work.ics`, 'W');
+      pod.put(`${POD}calendars/home.ics`, 'H');
+      flaky(`${POD}calendars/work.ics`, 10, dropped);
+      const listing = solidProvider.listFiles('calendars');
+      await vi.runAllTimersAsync();
+      const { files } = await listing;
+      expect(files.map((f) => f.name)).toEqual(['home.ics', 'work.ics']);
+      expect(await solidProvider.download(files[0]!.id)).toBe('H');
+      await expect(solidProvider.download(files[1]!.id)).rejects.toThrow(
+        /Could not reach work\.ics on your pod.*permissions/,
+      );
+    });
+
+    it('never repeats a save that got no answer (it may have been applied)', async () => {
+      pod.put(`${POD}calendars/work.ics`, 'W');
+      const listing = solidProvider.listFiles('calendars');
+      await vi.runAllTimersAsync();
+      const id = (await listing).files[0]!.id;
+      let puts = 0;
+      setSolidFetch((u, init) => {
+        if (init?.method === 'PUT') {
+          puts++;
+          return dropped();
+        }
+        return pod.fetch(u, init);
+      });
+      const upload = solidProvider.upload(id, 'mine');
+      const failed = expect(upload).rejects.toThrow('Could not reach work.ics');
+      await vi.runAllTimersAsync();
+      await failed;
+      expect(puts).toBe(1);
+    });
   });
 
   it('explains when the folder does not exist', async () => {

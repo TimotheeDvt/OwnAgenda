@@ -43,26 +43,71 @@ function unreachable(url: string): SolidError {
     return new SolidError("You're offline.", 0);
   }
   return new SolidError(
-    `Could not reach ${nameOf(url) || url} on your pod. If the pod opens in your browser, check ` +
-      "the folder's permissions (.acl): your WebID needs Read and Write, applied to the " +
-      'contained resources too.',
+    `Could not reach ${nameOf(url) || url} on your pod (the pod may be busy: try again). If it ` +
+      "keeps failing, check the folder's permissions (.acl): your WebID needs Read and Write, " +
+      'applied to the contained resources too.',
     0,
   );
 }
 
-/** fetch() with the Solid session. Throws SolidError for any non-2xx response. */
-async function podFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  let res: Response;
+/**
+ * Requests in flight at once. Pods (and the proxies in front of them) drop bursts: loading a
+ * folder of 15 calendars in parallel made some downloads fail at random.
+ */
+const MAX_PARALLEL = 4;
+/** Extra attempts after a failure the pod may recover from, waiting 0.5 s, then 1 s. */
+const RETRIES = 2;
+const RETRY_DELAY_MS = 500;
+/** "Busy, try later" answers: the request was not processed. */
+const BUSY_STATUSES = new Set([429, 502, 503, 504]);
+
+let active = 0;
+const waiting: (() => void)[] = [];
+
+async function withSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (active >= MAX_PARALLEL) await new Promise<void>((resolve) => waiting.push(resolve));
+  else active++;
   try {
-    res = await send(url, init);
-  } catch (err) {
-    // Not signed in (AuthError) keeps its own message; network failures are TypeErrors.
-    if (err instanceof TypeError) throw unreachable(url);
-    throw err;
+    return await task();
+  } finally {
+    // Hand the slot straight to the next request, or free it.
+    const next = waiting.shift();
+    if (next) next();
+    else active--;
   }
-  if (res.status === 401) markSolidSessionExpired();
-  if (!res.ok) throw new SolidError(describe(res, url), res.status);
-  return res;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * fetch() with the Solid session, a few requests at a time. Reads are retried after a network
+ * failure or a busy answer; writes only after a busy answer (a write that got no answer may have
+ * been applied, and repeating it would look like a conflict). Throws SolidError for any non-2xx
+ * response.
+ */
+async function podFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const isRead = method === 'GET' || method === 'HEAD';
+  for (let attempt = 0; ; attempt++) {
+    const canRetry = attempt < RETRIES;
+    let res: Response;
+    try {
+      res = await withSlot(() => send(url, init));
+    } catch (err) {
+      // Not signed in (AuthError) keeps its own message; network failures are TypeErrors.
+      if (!(err instanceof TypeError)) throw err;
+      if (!(canRetry && isRead && navigator.onLine !== false)) throw unreachable(url);
+      await sleep(RETRY_DELAY_MS * 2 ** attempt);
+      continue;
+    }
+    if (canRetry && BUSY_STATUSES.has(res.status)) {
+      await sleep(RETRY_DELAY_MS * 2 ** attempt);
+      continue;
+    }
+    if (res.status === 401) markSolidSessionExpired();
+    if (!res.ok) throw new SolidError(describe(res, url), res.status);
+    return res;
+  }
 }
 
 /** A file's name: the last segment of its URL. */
@@ -97,8 +142,17 @@ async function folderUrl(path: string): Promise<string> {
   return `${storage}${segments.map(encodeURIComponent).join('/')}/`;
 }
 
+/**
+ * Files downloaded while listing the folder (or why that failed), handed to the download() that
+ * follows: loading a folder costs one request per file instead of two.
+ */
+const prefetched = new Map<string, { body: string } | { error: unknown }>();
+
 async function getMeta(url: string): Promise<FileMeta> {
-  const res = await podFetch(url, { method: 'HEAD' });
+  return metaOf(url, await podFetch(url, { method: 'HEAD' }));
+}
+
+function metaOf(url: string, res: Response): FileMeta {
   const etag = res.headers.get('ETag');
   if (etag) etags.set(url, etag);
   else etags.delete(url);
@@ -156,12 +210,32 @@ export const solidProvider: StorageProvider = {
     const icsUrls = objectsOf(quads, base, LDP_CONTAINS).filter(
       (child) => !child.endsWith('/') && nameOf(child).toLowerCase().endsWith('.ics'),
     );
-    // The listing has no ETags; they are needed to detect changes made elsewhere.
-    const files = await Promise.all(icsUrls.map(getMeta));
+    // The listing has no ETags (needed to detect changes made elsewhere): each file is
+    // downloaded now, and its content kept for download(). A file that fails is still listed,
+    // so only that calendar shows a warning.
+    prefetched.clear();
+    const files = await Promise.all(
+      icsUrls.map(async (fileUrl) => {
+        try {
+          const fileRes = await podFetch(fileUrl);
+          prefetched.set(fileUrl, { body: await fileRes.text() });
+          return metaOf(fileUrl, fileRes);
+        } catch (error) {
+          prefetched.set(fileUrl, { error });
+          return { id: fileUrl, name: nameOf(fileUrl), modifiedTime: '' };
+        }
+      }),
+    );
     return { folderId: base, files: files.sort((a, b) => a.name.localeCompare(b.name)) };
   },
 
   async download(fileId) {
+    const early = prefetched.get(fileId);
+    if (early) {
+      prefetched.delete(fileId);
+      if ('error' in early) throw early.error;
+      return early.body;
+    }
     const res = await podFetch(fileId);
     return res.text();
   },
@@ -223,5 +297,6 @@ export const solidProvider: StorageProvider = {
   reset() {
     profile = null;
     etags.clear();
+    prefetched.clear();
   },
 };
