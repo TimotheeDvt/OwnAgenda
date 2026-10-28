@@ -1162,6 +1162,44 @@ code {
   opacity: 0.6;
 }
 
+/* Weekends slightly shaded (week/day columns, month cells); today keeps its own color. */
+.calendar-host.fc .fc-timegrid-col:is(.fc-day-sat, .fc-day-sun):not(.fc-day-today),
+.calendar-host.fc .fc-daygrid-day:is(.fc-day-sat, .fc-day-sun):not(.fc-day-today) {
+  background: color-mix(in srgb, var(--muted) 7%, transparent);
+}
+
+/* Today's date in a circle: in the column header (week/day views), on the day (month view). */
+.calendar-host.fc .fc-col-header-cell.fc-day-today .day-header-label b,
+.calendar-host.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8em;
+  height: 1.8em;
+  padding: 0 0.3em;
+  border-radius: 0.9em;
+  background: var(--primary);
+  color: #fff;
+}
+
+.calendar-host.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  margin: 2px;
+}
+
+/* Dragging an event with Ctrl / Alt / ⌘ held: dropping copies it (calendarView.ts). */
+body.is-copy-drag,
+body.is-copy-drag * {
+  cursor: copy !important;
+}
+
+/* Calendar color in menus (e.g. "Move to calendar…"). */
+.context-menu-dot {
+  width: 10px;
+  height: 10px;
+  margin: 3px;
+  border-radius: 50%;
+}
+
 /* Hover card of an event (eventTooltip.ts). */
 .event-tooltip {
   position: fixed;
@@ -2254,6 +2292,11 @@ body.is-resizing-sidebar {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* "Hide all calendars" (eye) at the right end of the title line. */
+.sidebar-title-row .visibility-toggle-all {
+  margin-left: auto;
 }
 
 .sidebar-title-row .status-icon svg {

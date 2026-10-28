@@ -272,9 +272,48 @@ function copyEventDetails(event: AgendaEvent): void {
   );
 }
 
+/** Ctrl/Alt + drag: a copy at the new times, in the same calendar (a one-off event, even if the
+ * original repeats). */
+export function copyEventTo(event: AgendaEvent, times: EventTimes): void {
+  if (run(() => addEvent(event.calendarFileId, { ...eventToDraft(event), ...times }))) {
+    showToast('Event copied.');
+  }
+}
+
+/** Moves an event to another calendar; a repeating one moves with its whole series. */
+async function moveEventToCalendar(event: AgendaEvent, targetFileId: string): Promise<void> {
+  if (event.recurring) {
+    const scope = await chooseScope('edit', { this: false, following: false });
+    if (!scope) return;
+    if (applyEdit(event, eventToDraft(event), { scope, targetFileId })) showToast('Event moved.');
+  } else if (applyEdit(event, eventToDraft(event), { targetFileId })) {
+    showToast('Event moved.');
+  }
+}
+
+/** "Move to calendar…": the calendars it can go to, in a menu at the same place. */
+function openMoveMenu(event: AgendaEvent, x: number, y: number): void {
+  const calendars = calendarOptions();
+  openContextMenu(
+    x,
+    y,
+    calendars.map((c) => {
+      const current = c.fileId === event.calendarFileId;
+      return {
+        label: current ? `${c.displayName} (current)` : c.displayName,
+        color: c.color,
+        disabled: current,
+        onSelect: () => void moveEventToCalendar(event, c.fileId),
+      };
+    }),
+    'Move to calendar',
+  );
+}
+
 /**
- * Right-click menu of an event: Open, Edit, Duplicate, Ghost, Copy details, Delete. Edit and
- * Delete are greyed out for subscribed calendars and while changes can't be saved.
+ * Right-click menu of an event: Open, Edit, Duplicate, Ghost, Move to calendar, Copy details,
+ * Delete. Edit, Move and Delete are greyed out for subscribed calendars and while changes can't
+ * be saved.
  */
 export function openEventMenu(event: AgendaEvent, x: number, y: number): void {
   const subscription = subscriptionOf(event.calendarFileId);
@@ -285,6 +324,7 @@ export function openEventMenu(event: AgendaEvent, x: number, y: number): void {
       ? "Events of subscribed online calendars can't be changed here."
       : undefined;
   const canEdit = !subscription && !readOnly;
+  const canMove = calendarOptions().length > 1;
   const ghost = isGhostEvent(event);
   openContextMenu(
     x,
@@ -314,6 +354,14 @@ export function openEventMenu(event: AgendaEvent, x: number, y: number): void {
         key: 'G',
         title: ghost ? 'Show normally (remove ghost)' : 'Make ghost (fade it)',
         onSelect: () => setGhostEvent(event, !ghost),
+      },
+      {
+        label: 'Move to calendar…',
+        icon: 'calendar',
+        key: 'M',
+        disabled: !canEdit || !canMove,
+        title: why ?? (canMove ? undefined : 'There is no other calendar to move it to.'),
+        onSelect: () => openMoveMenu(event, x, y),
       },
       {
         label: 'Copy details',

@@ -8,6 +8,7 @@ import {
   normalizeSettings,
   orderCalendars,
   resetSettings,
+  toggleAllCalendars,
   updateSettings,
 } from '../src/store/settingsStore';
 
@@ -89,6 +90,60 @@ describe('calendar order', () => {
       'b',
     ]);
     expect(normalizeSettings({ calendarOrder: 'nope' }).calendarOrder).toEqual([]);
+  });
+});
+
+describe('hide all calendars', () => {
+  const all = ['a', 'b', 'c'].map((fileId, index) => ({ fileId, index }));
+  const shown = () => all.filter((c) => getSettings().calendars[c.fileId]?.visible !== false);
+  const hide = (fileId: string) =>
+    updateSettings({
+      calendars: {
+        ...getSettings().calendars,
+        [fileId]: { ...getSettings().calendars[fileId]!, visible: false },
+      },
+    });
+
+  it('hides every calendar, then shows back only the ones that were shown', () => {
+    vi.useFakeTimers();
+    try {
+      resetSettings();
+      toggleAllCalendars(all);
+      toggleAllCalendars(all);
+      hide('b');
+      expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
+      toggleAllCalendars(all);
+      expect(shown()).toEqual([]);
+      expect(getSettings().shownBeforeHideAll).toEqual(['a', 'c']);
+      toggleAllCalendars(all);
+      expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
+      expect(getSettings().shownBeforeHideAll).toBeNull();
+    } finally {
+      resetSettings();
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows every calendar when nothing (still existing) was remembered', () => {
+    vi.useFakeTimers();
+    try {
+      resetSettings();
+      for (const { fileId } of all) hide(fileId);
+      toggleAllCalendars(all);
+      expect(shown()).toEqual(all);
+      for (const { fileId } of all) hide(fileId);
+      updateSettings({ shownBeforeHideAll: ['gone'] });
+      toggleAllCalendars(all);
+      expect(shown()).toEqual(all);
+    } finally {
+      resetSettings();
+      vi.useRealTimers();
+    }
+  });
+
+  it('normalizes the remembered list', () => {
+    expect(normalizeSettings({}).shownBeforeHideAll).toBeNull();
+    expect(normalizeSettings({ shownBeforeHideAll: ['a', 2] }).shownBeforeHideAll).toEqual(['a']);
   });
 });
 

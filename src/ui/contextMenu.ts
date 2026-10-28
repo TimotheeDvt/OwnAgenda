@@ -2,7 +2,9 @@ import { ICONS, type IconName } from './icons';
 
 export interface ContextMenuItem {
   label: string;
-  icon: IconName;
+  /** An icon, or `color`: a dot of that color (e.g. a calendar's). */
+  icon?: IconName;
+  color?: string;
   onSelect(): void;
   /** Red, for destructive actions (Delete). */
   danger?: boolean;
@@ -71,7 +73,13 @@ export function openContextMenu(
     if (entry.title) item.title = entry.title;
     const glyph = document.createElement('span');
     glyph.className = 'context-menu-icon';
-    glyph.innerHTML = ICONS[entry.icon];
+    if (entry.icon) glyph.innerHTML = ICONS[entry.icon];
+    else if (entry.color) {
+      const dot = document.createElement('span');
+      dot.className = 'context-menu-dot';
+      dot.style.background = entry.color;
+      glyph.append(dot);
+    }
     const text = document.createElement('span');
     text.textContent = entry.label;
     item.append(glyph, text);

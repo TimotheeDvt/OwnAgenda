@@ -63,6 +63,11 @@ export interface Settings {
   ghostEvents: GhostEvent[];
   /** False hides every ghost event from the calendar (toolbar toggle); they stay ghosted. */
   showGhosts: boolean;
+  /**
+   * The calendars that were shown when "Hide all calendars" was used (file IDs): "Show all"
+   * shows those again. Null when not hidden that way (then "Show all" shows every calendar).
+   */
+  shownBeforeHideAll: string[] | null;
 }
 
 export interface GhostEvent {
@@ -89,6 +94,7 @@ export function defaultSettings(): Settings {
     calendars: {},
     ghostEvents: [],
     showGhosts: true,
+    shownBeforeHideAll: null,
   };
 }
 
@@ -148,6 +154,9 @@ export function normalizeSettings(raw: unknown): Settings {
     calendars,
     ghostEvents: normalizeGhostEvents(raw.ghostEvents),
     showGhosts: typeof raw.showGhosts === 'boolean' ? raw.showGhosts : defaults.showGhosts,
+    shownBeforeHideAll: Array.isArray(raw.shownBeforeHideAll)
+      ? raw.shownBeforeHideAll.filter((id): id is string => typeof id === 'string')
+      : defaults.shownBeforeHideAll,
   };
 }
 
@@ -284,6 +293,29 @@ export function updateCalendarSettings(
       ...settings.calendars,
       [fileId]: { ...settings.calendars[fileId], ...getCalendarSettings(fileId, index), ...patch },
     },
+  });
+}
+
+/**
+ * "Hide all calendars" toggle (one change, saved once). Hiding remembers which calendars were
+ * shown; showing brings back those, or every calendar if none were remembered (or none of them
+ * exist any more).
+ */
+export function toggleAllCalendars(calendars: { fileId: string; index: number }[]): void {
+  const isShown = ({ fileId, index }: { fileId: string; index: number }) =>
+    getCalendarSettings(fileId, index).visible;
+  const hiding = calendars.some(isShown);
+  const remembered = new Set(settings.shownBeforeHideAll ?? []);
+  const restore = calendars.some(({ fileId }) => remembered.has(fileId));
+  const next = { ...settings.calendars };
+  for (const calendar of calendars) {
+    const { fileId, index } = calendar;
+    const visible = !hiding && (!restore || remembered.has(fileId));
+    next[fileId] = { ...next[fileId], ...getCalendarSettings(fileId, index), visible };
+  }
+  updateSettings({
+    calendars: next,
+    shownBeforeHideAll: hiding ? calendars.filter(isShown).map((c) => c.fileId) : null,
   });
 }
 

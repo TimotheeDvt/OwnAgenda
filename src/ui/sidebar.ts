@@ -11,6 +11,7 @@ import {
   moveCalendar,
   onSettingsChange,
   orderCalendars,
+  toggleAllCalendars,
   updateCalendarSettings,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
@@ -216,6 +217,21 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
   const list = el('ul', 'calendar-list');
   const ordered = orderCalendars(state.calendars);
+
+  // At the end of the title line: hides every calendar; once all are hidden, shows back the ones
+  // that were shown before (see toggleAllCalendars).
+  if (ordered.length > 0) {
+    const all = state.calendars.map((c, index) => ({ fileId: c.fileId, index }));
+    const anyShown = all.some(({ fileId, index }) => getCalendarSettings(fileId, index).visible);
+    const toggleAll = iconButton(
+      anyShown ? 'eye' : 'eyeOff',
+      anyShown ? 'Hide all calendars' : 'Show calendars again',
+      () => toggleAllCalendars(all),
+    );
+    toggleAll.classList.add('visibility-toggle-all');
+    toggleAll.setAttribute('aria-pressed', String(!anyShown));
+    title.append(toggleAll);
+  }
   const orderedIds = ordered.map((c) => c.fileId);
   ordered.forEach((calendar, position) => {
     // Default colors follow the stable name order, so reordering doesn't change them.

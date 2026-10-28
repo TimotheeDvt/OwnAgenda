@@ -33,6 +33,7 @@ import { instantToWall, isoWeek } from '../util/dates';
 import { tidyDescription } from '../util/text';
 import {
   changeEventTimes,
+  copyEventTo,
   createEventAt,
   formatWhen,
   openEvent,
@@ -350,6 +351,21 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
 
   // An event being dragged or resized: the finger moving is not a swipe.
   let dragging = false;
+  // The drop being handled is a copy (see eventDrop).
+  let copyOnDrop = false;
+  // While dragging an event, the cursor shows when dropping will copy it (Ctrl / Alt / ⌘ held).
+  const showCopyCursor = (e: KeyboardEvent | MouseEvent) => {
+    document.body.classList.toggle('is-copy-drag', e.ctrlKey || e.altKey || e.metaKey);
+    // Releasing Alt would otherwise focus the browser's menu bar.
+    if (e instanceof KeyboardEvent && e.key === 'Alt') e.preventDefault();
+  };
+  const watchCopyKeys = (on: boolean) => {
+    for (const type of ['keydown', 'keyup', 'pointermove'] as const) {
+      if (on) document.addEventListener(type, showCopyCursor, true);
+      else document.removeEventListener(type, showCopyCursor, true);
+    }
+    if (!on) document.body.classList.remove('is-copy-drag');
+  };
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
   const fromUrl = readUrlPosition();
   let currentView: string = fromUrl.view ?? initial.defaultView;
@@ -443,15 +459,35 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       if (agendaEvent) void openEvent(agendaEvent);
     },
     // Cleared after the touchend of the drag itself has been handled (not a swipe either).
-    eventDragStart: () => (dragging = true),
-    eventDragStop: () => setTimeout(() => (dragging = false)),
+    eventDragStart: (info) => {
+      dragging = true;
+      watchCopyKeys(true);
+      showCopyCursor(info.jsEvent);
+    },
+    eventDragStop: () => {
+      watchCopyKeys(false);
+      setTimeout(() => (dragging = false));
+    },
     eventResizeStart: () => (dragging = true),
     eventResizeStop: () => setTimeout(() => (dragging = false)),
+    // Ctrl (or Alt / ⌘) held on drop: a copy goes to the new time, the event stays. eventDrop
+    // runs just before eventChange, which does the copy.
+    eventDrop: (info) => {
+      const e = info.jsEvent;
+      copyOnDrop = e.ctrlKey || e.altKey || e.metaKey;
+    },
     eventChange: (info) => {
       const agendaEvent = agendaEventOf(info.event);
       const times = timesOf(info.event);
+      const copy = copyOnDrop;
+      copyOnDrop = false;
       if (!agendaEvent || !times) {
         info.revert();
+        return;
+      }
+      if (copy) {
+        info.revert();
+        copyEventTo(agendaEvent, times);
         return;
       }
       void changeEventTimes(agendaEvent, times).then((ok) => {
@@ -676,6 +712,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       clearInterval(listRefresh);
       host.removeEventListener('contextmenu', onContextMenu);
       offSwipes();
+      watchCopyKeys(false);
       offHistory();
       narrow.removeEventListener('change', onResize);
       offSettings();
