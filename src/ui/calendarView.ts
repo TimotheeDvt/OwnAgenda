@@ -33,6 +33,7 @@ import { isoWeek } from '../util/dates';
 import {
   changeEventTimes,
   createEventAt,
+  formatWhen,
   openEvent,
   openEventMenu,
   redoLastChange,
@@ -266,6 +267,7 @@ function upcomingOnly(events: AgendaEvent[], now: Date): AgendaEvent[] {
 function tooltip(event: AgendaEvent): string {
   return [
     event.title || '(No title)',
+    formatWhen(event, getSettings().timeZone, true),
     event.recurring ? '↻ Repeating event' : '',
     event.location,
     event.description,

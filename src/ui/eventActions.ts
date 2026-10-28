@@ -189,25 +189,30 @@ function duplicateExistingEvent(event: AgendaEvent): Promise<void> {
   });
 }
 
-/** "Mon 27 Oct 2026, 09:00 – 10:00" (all-day: "Mon 27 Oct 2026", or a range of days). */
-function formatWhen(event: AgendaEvent, timeZone: string): string {
+/**
+ * "Mon 27 Oct 2026, 09:00 – 10:00" (all-day: "Mon 27 Oct 2026", or a range of days).
+ * `compact` (tooltips): short dates ("27/10/26"), and none when the event starts and ends the
+ * same day ("09:00 – 10:00", "All day").
+ */
+export function formatWhen(event: AgendaEvent, timeZone: string, compact = false): string {
   const date = (d: Date, zone: string) =>
-    d.toLocaleDateString('en-GB', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: zone,
-    });
+    d.toLocaleDateString(
+      'en-GB',
+      compact
+        ? { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: zone }
+        : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: zone },
+    );
   if (event.allDay) {
     // All-day dates are midnight UTC; the end is exclusive.
     const last = new Date(event.end.getTime() - 86_400_000);
     const first = date(event.start, 'UTC');
-    return last > event.start ? `${first} – ${date(last, 'UTC')}` : first;
+    if (last > event.start) return `${first} – ${date(last, 'UTC')}`;
+    return compact ? 'All day' : first;
   }
   const time = (d: Date) =>
     d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
   const sameDay = date(event.start, timeZone) === date(event.end, timeZone);
+  if (sameDay && compact) return `${time(event.start)} – ${time(event.end)}`;
   return sameDay
     ? `${date(event.start, timeZone)}, ${time(event.start)} – ${time(event.end)}`
     : `${date(event.start, timeZone)}, ${time(event.start)} – ${date(event.end, timeZone)}, ${time(event.end)}`;
