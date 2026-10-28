@@ -1135,6 +1135,83 @@ code {
   opacity: 0.75;
 }
 
+/* Week/day event blocks: on the line of the hours, so it takes no room from the name. */
+.calendar-host.fc
+  .fc-timegrid-event:not(.fc-timegrid-event-short).is-recurring
+  .fc-event-title::after {
+  content: none;
+}
+
+.calendar-host.fc
+  .fc-timegrid-event:not(.fc-timegrid-event-short).is-recurring
+  .fc-event-time::after {
+  content: ' ↻';
+  opacity: 0.75;
+}
+
+/* Week/day views: names keep to the lines that fit and end with "…" (the number of lines is set
+   by calendarView.ts, from the block's height). */
+.calendar-host.fc .fc-timegrid-event .fc-event-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Week/day views: events that are over are faded, so what's left of the day stands out. */
+.calendar-host.fc .fc-timegrid-event.fc-event-past:not(.is-ghost) {
+  opacity: 0.6;
+}
+
+/* Hover card of an event (eventTooltip.ts). */
+.event-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.event-tooltip-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.event-tooltip-when,
+.event-tooltip-calendar {
+  color: var(--muted);
+}
+
+.event-tooltip-calendar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.event-tooltip-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.event-tooltip-line {
+  margin-top: 4px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  /* Long notes: the first lines only. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+
 /* Keyboard shortcuts dialog */
 
 /* Dev-only settings viewer (settingsDebug.ts). */
@@ -2304,6 +2381,11 @@ body.is-resizing-sidebar {
   .calendar-host.fc .fc-timeGridWeek-view .fc-event-title {
     overflow-wrap: anywhere;
     hyphens: auto;
+  }
+
+  /* The hours are hidden: the repeat marker goes back after the name. */
+  .calendar-host.fc .fc-timeGridWeek-view .fc-timegrid-event.is-recurring .fc-event-title::after {
+    content: ' ↻';
   }
 
   /* Month view: one line per event, cut at the cell edge without an ellipsis wasting room. */

@@ -23,9 +23,9 @@ import {
 } from '../store/ghostEvents';
 import { getCalendarSettings, getSettings, orderCalendars } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { instantToWall, wallToInstant } from '../util/dates';
+import { addDays, instantToWall, wallToInstant } from '../util/dates';
 import { chooseOption, type Choice } from './choiceDialog';
-import { openContextMenu } from './contextMenu';
+import { openContextMenu, type ContextMenuEntry } from './contextMenu';
 import { openEventDialog, type CalendarOption } from './eventDialog';
 import { openEventView } from './eventView';
 import { showToast } from './toast';
@@ -103,6 +103,44 @@ export async function createEventAt(times: EventTimes): Promise<void> {
     timeZone: getSettings().timeZone,
   });
   if (result?.action === 'save') run(() => addEvent(result.calendarFileId, result.draft));
+}
+
+/**
+ * Right-click menu of an empty part of the calendar: a new event there (one hour from the slot's
+ * time in week/day views), or a new all-day event on that day.
+ */
+export function openSlotMenu(slot: { date: string; time?: string }, x: number, y: number): void {
+  const readOnly = getCalendarState().readOnly;
+  const disabled = readOnly !== null;
+  const title = readOnly ? readOnlyMessage(readOnly) : undefined;
+  const allDay: EventTimes = { allDay: true, start: slot.date, end: addDays(slot.date, 1) };
+  const { time } = slot;
+  const entries: ContextMenuEntry[] = [];
+  if (time) {
+    const start = wallToInstant(slot.date, time, getSettings().timeZone);
+    entries.push({
+      label: `New event at ${time}`,
+      icon: 'plus',
+      key: 'N',
+      disabled,
+      title,
+      onSelect: () =>
+        void createEventAt({
+          allDay: false,
+          start: new Date(start).toISOString(),
+          end: new Date(start + 3_600_000).toISOString(),
+        }),
+    });
+  }
+  entries.push({
+    label: 'New all-day event',
+    icon: 'calendar',
+    key: time ? 'A' : 'N',
+    disabled,
+    title,
+    onSelect: () => void createEventAt(allDay),
+  });
+  openContextMenu(x, y, entries, 'Calendar');
 }
 
 /** New one-hour event starting at the next full hour (keyboard shortcut). */

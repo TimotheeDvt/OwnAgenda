@@ -1,6 +1,7 @@
 import type { EventDraft } from '../ics/edit';
 import { describeRule, type SimpleRule } from '../ics/rrule';
 import { addDays, instantToWall } from '../util/dates';
+import { tidyDescription } from '../util/text';
 import type { CalendarOption } from './eventDialog';
 import { ICONS, type IconName } from './icons';
 
@@ -212,8 +213,8 @@ export function openEventView(options: EventViewOptions): Promise<EventViewResul
       row('calendar', 'Calendar', name);
     }
 
-    // Blank lines around the text are only trimmed here, not in the calendar file.
-    const description = draft.description?.trim();
+    // Blank lines around and inside the text are only dropped here, not in the calendar file.
+    const description = tidyDescription(draft.description);
     if (description) {
       row('notes', 'Description', ...linkify(description)).classList.add('event-view-description');
     }

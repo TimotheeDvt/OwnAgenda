@@ -29,17 +29,20 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
-import { isoWeek } from '../util/dates';
+import { instantToWall, isoWeek } from '../util/dates';
+import { tidyDescription } from '../util/text';
 import {
   changeEventTimes,
   createEventAt,
   formatWhen,
   openEvent,
   openEventMenu,
+  openSlotMenu,
   redoLastChange,
   undoLastChange,
   type EventTimes,
 } from './eventActions';
+import { attachEventTooltip, detachEventTooltip, type EventTooltipContent } from './eventTooltip';
 import { captureToClipboard } from './captureView';
 import { openViewMenu } from './viewMenu';
 import intlTimeZonePlugin from './timeZonePlugin';
@@ -264,16 +267,61 @@ function upcomingOnly(events: AgendaEvent[], now: Date): AgendaEvent[] {
   return events.filter((e) => e.end.getTime() > now.getTime());
 }
 
-function tooltip(event: AgendaEvent): string {
-  return [
-    event.title || '(No title)',
-    formatWhen(event, getSettings().timeZone, true),
-    event.recurring ? '↻ Repeating event' : '',
-    event.location,
-    event.description,
-  ]
-    .filter(Boolean)
-    .join('\n');
+function tooltipContent(event: AgendaEvent): EventTooltipContent {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
+  return {
+    title: event.title || '(No title)',
+    when: formatWhen(event, getSettings().timeZone, true),
+    calendar: calendar && {
+      name: calendar.displayName,
+      color: getCalendarSettings(calendar.fileId, calendarIndex(calendar.fileId)).color,
+    },
+    lines: [
+      event.recurring ? '↻ Repeating event' : undefined,
+      event.location,
+      tidyDescription(event.description),
+    ],
+  };
+}
+
+/**
+ * Week/day views: event names keep to the lines that fit in the block and end with "…" instead
+ * of being cut through a line (see .fc-timegrid-event .fc-event-title). Runs again when the block
+ * is resized.
+ */
+const titleClamp = new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    const title = target.querySelector<HTMLElement>('.fc-event-title');
+    if (!title) continue;
+    const style = getComputedStyle(title);
+    // "normal" line height: about 1.2 × the font size.
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+    const lines = Math.max(1, Math.floor(target.clientHeight / lineHeight));
+    title.style.setProperty('-webkit-line-clamp', String(lines));
+  }
+});
+
+/** Week/day views open an hour before the current time, rather than at midnight. */
+function scrollTimeNow(timeZone: string): string {
+  const hour = Number(instantToWall(Date.now(), timeZone).time.slice(0, 2));
+  return `${String(Math.max(hour - 1, 0)).padStart(2, '0')}:00:00`;
+}
+
+/**
+ * The day (and in week/day views, the time slot) under a point of the window: where a right
+ * click on an empty part of the calendar would add an event. Null outside the grid.
+ */
+function slotAtPoint(x: number, y: number): { date: string; time?: string } | null {
+  const stack = document.elementsFromPoint(x, y);
+  const find = (selector: string) =>
+    stack.find((el): el is HTMLElement => el instanceof HTMLElement && el.matches(selector));
+  const column = find('.fc-timegrid-col[data-date]');
+  const lane = find('.fc-timegrid-slot-lane[data-time]');
+  if (column?.dataset.date && lane?.dataset.time) {
+    return { date: column.dataset.date, time: lane.dataset.time.slice(0, 5) };
+  }
+  const day = find('.fc-daygrid-day[data-date]');
+  return day?.dataset.date ? { date: day.dataset.date } : null;
 }
 
 function agendaEventOf(event: EventApi): AgendaEvent | undefined {
@@ -369,6 +417,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
     height: '100%',
     nowIndicator: true,
+    scrollTime: scrollTimeNow(initial.timeZone),
     dayMaxEvents: true,
     // Events at the same time side by side, each 1/N of the day width (not overlapping).
     slotEventOverlap: false,
@@ -432,7 +481,12 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
     eventDidMount: (info) => {
       const agendaEvent = agendaEventOf(info.event);
-      if (agendaEvent) info.el.title = tooltip(agendaEvent);
+      // Not on the copy that follows the pointer while dragging, nor during a drag.
+      if (agendaEvent && !info.isMirror) {
+        attachEventTooltip(info.el, () => (dragging ? null : tooltipContent(agendaEvent)));
+      }
+      const titleContainer = info.el.querySelector('.fc-timegrid-event .fc-event-title-container');
+      if (titleContainer) titleClamp.observe(titleContainer);
       const { icon, textColor } = info.event.extendedProps as { icon?: string; textColor?: string };
       placeIcon(info.el, icon, textColor);
       // Background (ghost) events get no eventClick: open them here. Stopping mousedown keeps
@@ -457,6 +511,11 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
           );
         });
       }
+    },
+    eventWillUnmount: (info) => {
+      detachEventTooltip(info.el);
+      const titleContainer = info.el.querySelector('.fc-event-title-container');
+      if (titleContainer) titleClamp.unobserve(titleContainer);
     },
     datesSet: (arg) => {
       requestAnimationFrame(syncListWeekNumbers);
@@ -542,6 +601,17 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     (direction) => (direction === 'next' ? calendar.next() : calendar.prev()),
   );
 
+  // Right click on an empty slot or day: "New event here". Events open their own menu first (and
+  // prevent the default); on touch screens a long press selects a range instead.
+  const onContextMenu = (e: MouseEvent) => {
+    if (e.defaultPrevented || (e as PointerEvent).pointerType === 'touch') return;
+    const slot = slotAtPoint(e.clientX, e.clientY);
+    if (!slot) return;
+    e.preventDefault();
+    openSlotMenu(slot, e.clientX, e.clientY);
+  };
+  host.addEventListener('contextmenu', onContextMenu);
+
   const listRefresh = setInterval(() => {
     if (calendar.view.type.startsWith('list')) calendar.refetchEvents();
   }, LIST_REFRESH_MS);
@@ -602,6 +672,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     updateSize: () => calendar.updateSize(),
     destroy() {
       clearInterval(listRefresh);
+      host.removeEventListener('contextmenu', onContextMenu);
       offSwipes();
       offHistory();
       narrow.removeEventListener('change', onResize);
