@@ -370,6 +370,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     height: '100%',
     nowIndicator: true,
     dayMaxEvents: true,
+    // Events at the same time side by side, each 1/N of the day width (not overlapping).
+    slotEventOverlap: false,
     editable: true,
     selectable: true,
     selectMirror: true,

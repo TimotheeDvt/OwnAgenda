@@ -771,17 +771,15 @@ code {
   cursor: pointer;
 }
 
-/* Week/day views: every timed event (ghost or not) takes the whole column width, with the same
-   margin on each side; overlapping events are stacked instead of side by side. FullCalendar sets
-   the side-by-side positions inline, hence !important. */
+/* Week/day views: the same margin on each side of the day column. Events at the same time share
+   its width equally (slotEventOverlap: false); ghosts, behind them, take the whole width. */
 .calendar-host.fc .fc-timegrid-col-events {
-  margin: 0;
+  margin: 0 3px;
 }
 
-.calendar-host.fc .fc-timegrid-event-harness,
 .calendar-host.fc .fc-timegrid-bg-harness:has(.is-ghost) {
-  left: 3px !important;
-  right: 3px !important;
+  left: 3px;
+  right: 3px;
 }
 
 .calendar-host.fc .fc-bg-event.is-ghost .fc-event-title {
@@ -2134,9 +2132,11 @@ body.is-resizing-sidebar {
   pointer-events: none;
 }
 
-/* Keep the hours and the name clear of the icon. */
-.calendar-host.fc .has-icon .fc-event-main,
-.calendar-host.fc .has-icon .fc-event-title-container {
+/* Keep the hours clear of the icon; the name below them gets the full width. Where the icon is on
+   the name's line (all-day bars, short events with hours and name on one line), the name too. */
+.calendar-host.fc .has-icon .fc-event-time,
+.calendar-host.fc .fc-daygrid-block-event.has-icon .fc-event-title-container,
+.calendar-host.fc .fc-timegrid-event-short.has-icon .fc-event-main-frame {
   padding-right: 1.4em;
 }
 
@@ -2290,9 +2290,8 @@ body.is-resizing-sidebar {
     display: none;
   }
 
-  .calendar-host.fc .fc-timeGridWeek-view .has-icon .fc-event-main,
   .calendar-host.fc .fc-timeGridWeek-view .has-icon .fc-event-title-container,
-  .calendar-host.fc .fc-dayGridMonth-view .has-icon .fc-event-main,
+  .calendar-host.fc .fc-timeGridWeek-view .has-icon .fc-event-main-frame,
   .calendar-host.fc .fc-dayGridMonth-view .has-icon .fc-event-title-container {
     padding-right: 0;
   }
