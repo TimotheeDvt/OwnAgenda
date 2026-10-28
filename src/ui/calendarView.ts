@@ -418,6 +418,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     height: '100%',
     nowIndicator: true,
     scrollTime: scrollTimeNow(initial.timeZone),
+    // Going to another week/day keeps the hours scrolled to (only a new view starts at scrollTime).
+    scrollTimeReset: false,
     dayMaxEvents: true,
     // Events at the same time side by side, each 1/N of the day width (not overlapping).
     slotEventOverlap: false,
