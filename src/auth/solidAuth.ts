@@ -3,7 +3,7 @@
 // Unlike Google's popup, signing in is a full-page redirect to the Solid provider and back. The
 // library is only downloaded when Solid is used.
 
-import type { Session } from '@inrupt/solid-client-authn-browser';
+import type { EVENTS, Session } from '@inrupt/solid-client-authn-browser';
 import { SOLID_CLIENT_NAME } from '../config';
 import { parseProfile } from '../storage/solid/rdf';
 import { AuthError, storageGet, storageSet, type AuthListener, type AuthState } from './types';
@@ -16,7 +16,17 @@ const SILENT_LOGIN_ERRORS = new Set(['login_required', 'interaction_required', '
 /** Query parameters the provider adds when redirecting back to the app. */
 const REDIRECT_PARAMS = ['code', 'state', 'iss', 'error', 'error_description'];
 
+/**
+ * The library renews the access token on a timer shortly before it expires, and only then. In a
+ * background tab or after the computer slept, that timer runs late: requests sent in the
+ * meantime would use the expired token and get a 401. They wait this long for the renewal.
+ */
+const RENEWAL_WAIT_MS = 10_000;
+/** Treat the token as expired this long before its expiration date. */
+const EXPIRY_MARGIN_MS = 5_000;
+
 let session: Session | null = null;
+let renewedEvent: (typeof EVENTS)['SESSION_EXTENDED'] = 'sessionExtended';
 let signedIn = false;
 let webId: string | null = null;
 let redirectError: string | null = null;
@@ -39,8 +49,34 @@ async function getSession(): Promise<Session> {
   if (session) return session;
   const { Session: SessionClass, EVENTS } = await import('@inrupt/solid-client-authn-browser');
   session = new SessionClass();
+  renewedEvent = EVENTS.SESSION_EXTENDED;
   session.events.on(EVENTS.SESSION_EXPIRED, () => markSolidSessionExpired());
+  // A renewal that arrives after the app gave up (read-only, "Reconnect"): back to normal.
+  session.events.on(EVENTS.SESSION_EXTENDED, () => {
+    if (!signedIn && webId && session?.info.isLoggedIn) {
+      signedIn = true;
+      emitIfChanged();
+    }
+  });
   return session;
+}
+
+function tokenIsStale(s: Session): boolean {
+  const expires = s.info.expirationDate;
+  return typeof expires === 'number' && Date.now() >= expires - EXPIRY_MARGIN_MS;
+}
+
+/** Resolves when the library renewed the token, or after RENEWAL_WAIT_MS. */
+function waitForRenewal(s: Session): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      s.events.off(renewedEvent, done);
+      resolve();
+    };
+    const timer = setTimeout(done, RENEWAL_WAIT_MS);
+    s.events.once(renewedEvent, done);
+  });
 }
 
 /** The app's own URL, where the provider sends the user back (no query or hash). */
@@ -170,14 +206,21 @@ export function rememberedSolidAccount(): string | null {
   return webId;
 }
 
-/** fetch() that sends the Solid session's tokens. */
-export function solidFetch(input: string, init?: RequestInit): Promise<Response> {
-  if (!session || !signedIn) {
-    return Promise.reject(
-      new AuthError('Your Solid session expired. Tap "Reconnect" to continue.'),
-    );
+/**
+ * fetch() that sends the Solid session's tokens. When the token is past its expiration (its
+ * renewal is running late) or the pod answers 401, it waits for the renewal and tries once more:
+ * only a 401 after that means the session is really over.
+ */
+export async function solidFetch(input: string, init?: RequestInit): Promise<Response> {
+  const s = session;
+  if (!s || !signedIn) {
+    throw new AuthError('Your Solid session expired. Tap "Reconnect" to continue.');
   }
-  return session.fetch(input, init);
+  if (tokenIsStale(s)) await waitForRenewal(s);
+  const res = await s.fetch(input, init);
+  if (res.status !== 401 || !tokenIsStale(s)) return res;
+  await waitForRenewal(s);
+  return s.fetch(input, init);
 }
 
 export function onSolidAuthChange(listener: AuthListener): () => void {
