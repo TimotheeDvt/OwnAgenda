@@ -141,7 +141,15 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
 function renderUser(user: StorageUser | null): void {
   currentUser = user;
   const nodes: Node[] = [];
-  if (user) {
+  if (user && storage().id === 'solid') {
+    // The Solid emblem stands for the account; the WebID shows on hover.
+    const emblem = document.createElement('img');
+    emblem.className = 'storage-emblem';
+    emblem.src = `${import.meta.env.BASE_URL}solid-emblem.svg`;
+    emblem.alt = `Solid pod: ${user.email}`;
+    emblem.title = user.email;
+    nodes.push(emblem);
+  } else if (user) {
     if (user.photoUrl) {
       const img = document.createElement('img');
       img.className = 'avatar';

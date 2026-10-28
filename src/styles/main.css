@@ -204,6 +204,11 @@ code {
   border-radius: 50%;
 }
 
+.storage-emblem {
+  width: 28px;
+  height: 28px;
+}
+
 .user-name {
   white-space: nowrap;
   overflow: hidden;
