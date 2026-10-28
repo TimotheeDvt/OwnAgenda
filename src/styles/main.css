@@ -584,6 +584,96 @@ code {
 
 .calendar-host.fc .fc-toolbar-title {
   font-size: 1.3rem;
+  /* Opens the month picker (monthPicker.ts). */
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.calendar-host.fc .fc-toolbar-title:hover,
+.calendar-host.fc .fc-toolbar-title[aria-expanded='true'] {
+  background: var(--surface-hover);
+}
+
+.calendar-host.fc .fc-toolbar-title:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* Month picker under the toolbar title: "‹ 2026 ›", 12 months (or 12 years), Today. */
+.month-picker {
+  position: fixed;
+  z-index: 50;
+  width: 240px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.month-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.month-picker-heading,
+.month-picker-nav,
+.month-picker-cell {
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.month-picker-heading {
+  flex: 1;
+  padding: 6px;
+  font-weight: 600;
+}
+
+.month-picker-nav {
+  width: 32px;
+  padding: 6px 0;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.month-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.month-picker-cell {
+  padding: 9px 0;
+  font-size: 0.9rem;
+}
+
+.month-picker-heading:hover,
+.month-picker-nav:hover,
+.month-picker-cell:hover {
+  background: var(--surface-hover);
+}
+
+.month-picker-cell.is-today {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.month-picker-cell.is-selected {
+  background: var(--primary);
+  color: #fff;
+}
+
+.month-picker-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .calendar-host.fc a {

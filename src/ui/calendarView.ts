@@ -45,6 +45,7 @@ import {
 } from './eventActions';
 import { attachEventTooltip, detachEventTooltip, type EventTooltipContent } from './eventTooltip';
 import { captureToClipboard } from './captureView';
+import { openMonthPicker } from './monthPicker';
 import { openViewMenu } from './viewMenu';
 import intlTimeZonePlugin from './timeZonePlugin';
 
@@ -559,6 +560,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       requestAnimationFrame(syncListWeekNumbers);
       updateHistoryButtons();
       syncViewMenuButton();
+      syncTitleButton();
       const view = arg.view.type as ViewName;
       // Same dates in another view reuse the loaded events; reload so the list view can leave
       // out past events (and other views show them again).
@@ -590,6 +592,25 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       badge.classList.add('list-week-number');
       row.querySelector('.fc-list-day-cushion')?.prepend(badge);
     }
+  }
+
+  /** The toolbar title (the dates shown) opens the month picker: a button for keyboards too. */
+  function syncTitleButton(): void {
+    for (const title of host.querySelectorAll<HTMLElement>('.fc-toolbar-title')) {
+      title.setAttribute('role', 'button');
+      title.tabIndex = 0;
+      title.title = 'Go to a month or year';
+      title.setAttribute('aria-haspopup', 'dialog');
+    }
+  }
+
+  function showMonthPicker(title: HTMLElement): void {
+    openMonthPicker(title, {
+      current: calendar.formatIso(calendar.getDate(), true).slice(0, 7),
+      today: instantToWall(Date.now(), getSettings().timeZone).date.slice(0, 7),
+      onPick: (month) => calendar.gotoDate(`${month}-01`),
+      onToday: () => calendar.today(),
+    });
   }
 
   /** The phone view menu button shows the current view's name (and ▾). */
@@ -639,6 +660,21 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     (direction) => (direction === 'next' ? calendar.next() : calendar.prev()),
   );
 
+  // The toolbar title is rebuilt with the toolbar: listen on the host.
+  const onTitleClick = (e: MouseEvent) => {
+    const title = (e.target as Element).closest<HTMLElement>('.fc-toolbar-title');
+    if (title) showMonthPicker(title);
+  };
+  const onTitleKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const title = (e.target as Element).closest<HTMLElement>('.fc-toolbar-title');
+    if (!title) return;
+    e.preventDefault();
+    showMonthPicker(title);
+  };
+  host.addEventListener('click', onTitleClick);
+  host.addEventListener('keydown', onTitleKey);
+
   // Right click on an empty slot or day: "New event here". Events open their own menu first (and
   // prevent the default); on touch screens a long press selects a range instead.
   const onContextMenu = (e: MouseEvent) => {
@@ -662,6 +698,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     updateHistoryButtons();
     syncGhostsButton();
     syncViewMenuButton();
+    syncTitleButton();
   };
   narrow.addEventListener('change', onResize);
 
@@ -711,6 +748,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     destroy() {
       clearInterval(listRefresh);
       host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('click', onTitleClick);
+      host.removeEventListener('keydown', onTitleKey);
       offSwipes();
       watchCopyKeys(false);
       offHistory();
