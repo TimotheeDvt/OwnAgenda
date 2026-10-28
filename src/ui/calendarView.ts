@@ -34,6 +34,7 @@ import {
   changeEventTimes,
   createEventAt,
   openEvent,
+  openEventMenu,
   redoLastChange,
   undoLastChange,
   type EventTimes,
@@ -435,6 +436,22 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       if (info.event.display === 'background' && agendaEvent) {
         info.el.addEventListener('mousedown', (e) => e.stopPropagation());
         info.el.addEventListener('click', () => void openEvent(agendaEvent));
+      }
+      // Right click (or the menu key / Shift+F10 on a focused event): the event's menu. Not on
+      // touch screens, where a long press drags the event.
+      if (agendaEvent) {
+        info.el.addEventListener('contextmenu', (e) => {
+          if ((e as PointerEvent).pointerType === 'touch') return;
+          e.preventDefault();
+          // From the keyboard there is no pointer position: open below the event's top-left.
+          const keyboard = e.clientX === 0 && e.clientY === 0;
+          const rect = info.el.getBoundingClientRect();
+          openEventMenu(
+            agendaEvent,
+            keyboard ? rect.left + 8 : e.clientX,
+            keyboard ? rect.top + 20 : e.clientY,
+          );
+        });
       }
     },
     datesSet: (arg) => {

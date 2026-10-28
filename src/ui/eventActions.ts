@@ -25,6 +25,7 @@ import { getCalendarSettings, getSettings, orderCalendars } from '../store/setti
 import type { AgendaEvent } from '../types';
 import { instantToWall, wallToInstant } from '../util/dates';
 import { chooseOption, type Choice } from './choiceDialog';
+import { openContextMenu } from './contextMenu';
 import { openEventDialog, type CalendarOption } from './eventDialog';
 import { openEventView } from './eventView';
 import { showToast } from './toast';
@@ -173,14 +174,123 @@ export async function openEvent(event: AgendaEvent): Promise<void> {
     canDuplicate: !readOnly,
   });
   if (choice === 'duplicate') {
-    // The copy repeats like the original (unless its rule is too complex for the editor).
-    await duplicateEvent(event.calendarFileId, {
-      ...draft,
-      rrule: rule && !rule.custom ? rule.rule : null,
-    });
+    await duplicateExistingEvent(event);
   } else if (choice === 'edit') {
     await editExistingEvent(event);
   }
+}
+
+/** The copy repeats like the original (unless its rule is too complex for the editor). */
+function duplicateExistingEvent(event: AgendaEvent): Promise<void> {
+  const rule = event.recurring ? ruleOfEvent(event) : undefined;
+  return duplicateEvent(event.calendarFileId, {
+    ...eventToDraft(event),
+    rrule: rule && !rule.custom ? rule.rule : null,
+  });
+}
+
+/** "Mon 27 Oct 2026, 09:00 – 10:00" (all-day: "Mon 27 Oct 2026", or a range of days). */
+function formatWhen(event: AgendaEvent, timeZone: string): string {
+  const date = (d: Date, zone: string) =>
+    d.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: zone,
+    });
+  if (event.allDay) {
+    // All-day dates are midnight UTC; the end is exclusive.
+    const last = new Date(event.end.getTime() - 86_400_000);
+    const first = date(event.start, 'UTC');
+    return last > event.start ? `${first} – ${date(last, 'UTC')}` : first;
+  }
+  const time = (d: Date) =>
+    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
+  const sameDay = date(event.start, timeZone) === date(event.end, timeZone);
+  return sameDay
+    ? `${date(event.start, timeZone)}, ${time(event.start)} – ${time(event.end)}`
+    : `${date(event.start, timeZone)}, ${time(event.start)} – ${date(event.end, timeZone)}, ${time(event.end)}`;
+}
+
+/** Copies the event as text (title, when, where, notes), e.g. to paste it in a message. */
+function copyEventDetails(event: AgendaEvent): void {
+  const text = [
+    event.title || '(No title)',
+    formatWhen(event, getSettings().timeZone),
+    event.location,
+    event.description,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  navigator.clipboard.writeText(text).then(
+    () => showToast('Event details copied.'),
+    () => showToast("Couldn't copy to the clipboard.", 'error'),
+  );
+}
+
+/**
+ * Right-click menu of an event: Open, Edit, Duplicate, Ghost, Copy details, Delete. Edit and
+ * Delete are greyed out for subscribed calendars and while changes can't be saved.
+ */
+export function openEventMenu(event: AgendaEvent, x: number, y: number): void {
+  const subscription = subscriptionOf(event.calendarFileId);
+  const readOnly = getCalendarState().readOnly;
+  const why = readOnly
+    ? readOnlyMessage(readOnly)
+    : subscription
+      ? "Events of subscribed online calendars can't be changed here."
+      : undefined;
+  const canEdit = !subscription && !readOnly;
+  const ghost = isGhostEvent(event);
+  openContextMenu(
+    x,
+    y,
+    [
+      { label: 'Open', icon: 'eye', key: 'O', onSelect: () => void openEvent(event) },
+      {
+        label: 'Edit',
+        icon: 'edit',
+        key: 'E',
+        disabled: !canEdit,
+        title: why,
+        onSelect: () => void editExistingEvent(event),
+      },
+      {
+        label: 'Duplicate',
+        icon: 'copy',
+        key: 'D',
+        // A subscribed event can still be copied into one of your calendars (not while offline).
+        disabled: readOnly !== null,
+        title: readOnly ? readOnlyMessage(readOnly) : undefined,
+        onSelect: () => void duplicateExistingEvent(event),
+      },
+      {
+        label: ghost ? 'Unghost' : 'Ghost',
+        icon: 'ghost',
+        key: 'G',
+        title: ghost ? 'Show normally (remove ghost)' : 'Make ghost (fade it)',
+        onSelect: () => setGhostEvent(event, !ghost),
+      },
+      {
+        label: 'Copy details',
+        icon: 'clipboard',
+        key: 'C',
+        onSelect: () => copyEventDetails(event),
+      },
+      null,
+      {
+        label: 'Delete',
+        icon: 'trash',
+        key: 'Delete',
+        danger: true,
+        disabled: !canEdit,
+        title: why,
+        onSelect: () => void confirmAndDelete(event),
+      },
+    ],
+    event.title || 'Event',
+  );
 }
 
 /** Asks for confirmation (which occurrences, for a series), then deletes. True if deleted. */
