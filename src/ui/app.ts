@@ -100,7 +100,7 @@ function renderLayout(root: HTMLElement): Layout {
   root.innerHTML = `
     <header class="app-header">
       <button type="button" class="icon-btn menu-btn" aria-label="Show calendars" hidden>☰</button>
-      <h1 class="app-title">ICS Agenda</h1>
+      <h1 class="app-title">Agenda</h1>
       <div class="header-now"></div>
       <div class="header-actions">
         <div class="save-status" aria-live="polite"></div>

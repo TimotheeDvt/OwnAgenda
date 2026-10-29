@@ -340,7 +340,7 @@ export function moveEvent(
 export function newCalendarComponent(name: string): ICAL.Component {
   const vcalendar = new ICAL.Component('vcalendar');
   vcalendar.addPropertyWithValue('version', '2.0');
-  vcalendar.addPropertyWithValue('prodid', '-//ICS Agenda//EN');
+  vcalendar.addPropertyWithValue('prodid', '-//Agenda//EN');
   vcalendar.addPropertyWithValue('calscale', 'GREGORIAN');
   vcalendar.addPropertyWithValue('x-wr-calname', name);
   return vcalendar;
