@@ -1,9 +1,33 @@
+import { calendarIndex, getCalendarState } from '../store/calendarStore';
+import { getCalendarSettings, getSettings } from '../store/settingsStore';
+import type { AgendaEvent } from '../types';
+import { tidyDescription } from '../util/text';
+import { formatWhen } from './eventActions';
+
 export interface EventTooltipContent {
   title: string;
   when: string;
   calendar?: { name: string; color: string };
   /** Further lines (repeat, location, notes), empty ones left out. */
   lines: (string | undefined)[];
+}
+
+/** Hover card contents of an event: title, when, calendar, repeat, location and notes. */
+export function eventTooltipContent(event: AgendaEvent): EventTooltipContent {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
+  return {
+    title: event.title || '(No title)',
+    when: formatWhen(event, getSettings().timeZone, true),
+    calendar: calendar && {
+      name: calendar.displayName,
+      color: getCalendarSettings(calendar.fileId, calendarIndex(calendar.fileId)).color,
+    },
+    lines: [
+      event.recurring ? '↻ Repeating event' : undefined,
+      event.location,
+      tidyDescription(event.description),
+    ],
+  };
 }
 
 /** Shows quicker than the browser's title tooltip (about a second). */

@@ -6,16 +6,40 @@ import {
 } from '../store/calendarStore';
 import { getCalendarSettings, getSettings, onSettingsChange } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { formatStartsIn } from '../util/dates';
+import { browserTimeZone } from '../util/timeZone';
+import { attachEventTooltip, detachEventTooltip, eventTooltipContent } from './eventTooltip';
 
-/** Timed events of visible calendars happening right now, the one ending first first. */
-function currentEvents(now: Date): AgendaEvent[] {
-  if (getCalendarState().status !== 'ready') return [];
-  return eventsInRange(
-    { start: now, end: new Date(now.getTime() + 1) },
+/** How far ahead to look for the next event when nothing is going on. */
+const LOOKAHEAD_MS = 7 * 24 * 3600_000;
+
+interface NowState {
+  /** Timed events happening right now, the one ending first first. */
+  current: AgendaEvent[];
+  /** Timed events starting soonest (several when they start at the same time), when nothing is current. */
+  next: AgendaEvent[];
+}
+
+/** Current (or else upcoming) timed events of visible calendars. */
+function nowState(now: Date): NowState {
+  if (getCalendarState().status !== 'ready') return { current: [], next: [] };
+  const events = eventsInRange(
+    { start: now, end: new Date(now.getTime() + LOOKAHEAD_MS) },
     (cal) => getCalendarSettings(cal.fileId, calendarIndex(cal.fileId)).visible,
-  )
-    .filter((e) => !e.allDay && e.start <= now && now < e.end)
+  ).filter((e) => !e.allDay && now < e.end);
+  const current = events
+    .filter((e) => e.start <= now)
     .sort((a, b) => a.end.getTime() - b.end.getTime());
+  if (current.length > 0) return { current, next: [] };
+  const upcoming = events.sort((a, b) => a.start.getTime() - b.start.getTime());
+  const first = upcoming[0];
+  const next = first ? upcoming.filter((e) => e.start.getTime() === first.start.getTime()) : [];
+  return { current: [], next };
+}
+
+/** Zone an event's times are shown in: floating times are wall-clock times in the browser zone. */
+function displayZone(input: string): string {
+  return input.endsWith('Z') ? getSettings().timeZone : browserTimeZone();
 }
 
 function formatEnd(event: AgendaEvent): string {
@@ -23,14 +47,14 @@ function formatEnd(event: AgendaEvent): string {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-    // Floating times are wall-clock times: their Date is in the browser zone.
-    timeZone: event.endInput.endsWith('Z') ? getSettings().timeZone : undefined,
+    timeZone: displayZone(event.endInput),
   });
 }
 
 /**
  * "Now" bubble in the header: the event happening right now (title, until when), "+N" when
- * several overlap; empty when nothing is going on. Clicking it opens the event.
+ * several overlap; when nothing is going on, the next event (title, "in …"); empty when there is
+ * none within a week. Clicking it opens the event.
  */
 export function mountCurrentEvent(
   host: HTMLElement,
@@ -43,11 +67,18 @@ export function mountCurrentEvent(
   bubble.addEventListener('click', () => {
     if (shown) onOpen(shown);
   });
+  // Same hover card as the event in the calendar.
+  attachEventTooltip(bubble, () => (shown ? eventTooltipContent(shown) : null));
 
   const render = () => {
-    const events = currentEvents(new Date());
+    const now = new Date();
+    const state = nowState(now);
+    const upcoming = state.current.length === 0;
+    const events = upcoming ? state.next : state.current;
     shown = events[0] ?? null;
+    bubble.classList.toggle('upcoming', upcoming);
     if (!shown) {
+      detachEventTooltip(bubble);
       host.replaceChildren();
       return;
     }
@@ -60,7 +91,9 @@ export function mountCurrentEvent(
     title.textContent = `${settings.icon ? `${settings.icon} ` : ''}${shown.title || '(No title)'}`;
     const until = document.createElement('span');
     until.className = 'current-event-until';
-    until.textContent = `until ${formatEnd(shown)}`;
+    until.textContent = upcoming
+      ? formatStartsIn(shown.start.getTime(), now.getTime(), displayZone(shown.startInput))
+      : `until ${formatEnd(shown)}`;
     const nodes: Node[] = [dot, title, until];
     if (events.length > 1) {
       const more = document.createElement('span');
@@ -73,7 +106,6 @@ export function mountCurrentEvent(
       nodes.push(more);
     }
     bubble.replaceChildren(...nodes);
-    bubble.title = `Now: ${shown.title || '(No title)'} (until ${formatEnd(shown)})`;
     if (bubble.parentElement !== host) host.replaceChildren(bubble);
   };
 
@@ -96,6 +128,7 @@ export function mountCurrentEvent(
     clearInterval(interval);
     offCalendars();
     offSettings();
+    detachEventTooltip(bubble);
     host.replaceChildren();
   };
 }

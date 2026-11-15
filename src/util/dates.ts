@@ -50,6 +50,24 @@ export function instantToWall(ms: number, timeZone: string): { date: string; tim
   };
 }
 
+/**
+ * How long until `startMs`, seen at `nowMs` in `timeZone`: "in 5 min" within the hour, "in 2 h 05"
+ * later today, "tomorrow at 09:00", then "in 3 days" (calendar days, not 24-hour periods).
+ */
+export function formatStartsIn(startMs: number, nowMs: number, timeZone: string): string {
+  const minutes = Math.max(1, Math.ceil((startMs - nowMs) / 60_000));
+  if (minutes < 60) return `in ${minutes} min`;
+  const start = instantToWall(startMs, timeZone);
+  const days = diffDays(start.date, instantToWall(nowMs, timeZone).date);
+  if (days <= 0) {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `in ${hours} h ${pad(rest)}` : `in ${hours} h`;
+  }
+  if (days === 1) return `tomorrow at ${start.time}`;
+  return `in ${days} days`;
+}
+
 /** Inverse of instantToWall: wall-clock date + time in the zone → epoch ms (NaN if invalid). */
 export function wallToInstant(date: string, time: string, timeZone: string): number {
   const m = LOCAL_DATETIME_RE.exec(`${date}T${time}`);

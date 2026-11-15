@@ -165,6 +165,15 @@ code {
   cursor: pointer;
 }
 
+/* Next event (nothing going on right now): toned down so it doesn't read as "now". */
+.current-event.upcoming {
+  border-style: dashed;
+}
+
+.current-event.upcoming .current-event-title {
+  font-weight: 500;
+}
+
 .current-event:hover {
   background: var(--surface-hover);
 }

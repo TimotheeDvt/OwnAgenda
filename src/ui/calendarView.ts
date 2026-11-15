@@ -30,12 +30,10 @@ import {
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { instantToWall, isoWeek } from '../util/dates';
-import { tidyDescription } from '../util/text';
 import {
   changeEventTimes,
   copyEventTo,
   createEventAt,
-  formatWhen,
   openEvent,
   openEventMenu,
   openSlotMenu,
@@ -43,7 +41,7 @@ import {
   undoLastChange,
   type EventTimes,
 } from './eventActions';
-import { attachEventTooltip, detachEventTooltip, type EventTooltipContent } from './eventTooltip';
+import { attachEventTooltip, detachEventTooltip, eventTooltipContent } from './eventTooltip';
 import { captureToClipboard } from './captureView';
 import { openMonthPicker } from './monthPicker';
 import { openViewMenu } from './viewMenu';
@@ -267,23 +265,6 @@ const LIST_REFRESH_MS = 60_000;
 /** Events that haven't ended yet (ongoing or future). */
 function upcomingOnly(events: AgendaEvent[], now: Date): AgendaEvent[] {
   return events.filter((e) => e.end.getTime() > now.getTime());
-}
-
-function tooltipContent(event: AgendaEvent): EventTooltipContent {
-  const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
-  return {
-    title: event.title || '(No title)',
-    when: formatWhen(event, getSettings().timeZone, true),
-    calendar: calendar && {
-      name: calendar.displayName,
-      color: getCalendarSettings(calendar.fileId, calendarIndex(calendar.fileId)).color,
-    },
-    lines: [
-      event.recurring ? '↻ Repeating event' : undefined,
-      event.location,
-      tidyDescription(event.description),
-    ],
-  };
 }
 
 /**
@@ -523,7 +504,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       const agendaEvent = agendaEventOf(info.event);
       // Not on the copy that follows the pointer while dragging, nor during a drag.
       if (agendaEvent && !info.isMirror) {
-        attachEventTooltip(info.el, () => (dragging ? null : tooltipContent(agendaEvent)));
+        attachEventTooltip(info.el, () => (dragging ? null : eventTooltipContent(agendaEvent)));
       }
       const titleContainer = info.el.querySelector('.fc-timegrid-event .fc-event-title-container');
       if (titleContainer) titleClamp.observe(titleContainer);
