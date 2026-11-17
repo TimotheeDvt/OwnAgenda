@@ -17,6 +17,7 @@ import { storage, type StorageUser } from '../storage';
 import {
   clearCalendars,
   createCalendar,
+  importCalendar,
   errorMessage,
   getCalendarState,
   hasUnsavedChanges,
@@ -531,6 +532,17 @@ async function setCorsProxy(): Promise<void> {
   updateSettings({ corsProxy: values.proxy ?? '' });
 }
 
+async function importFile(file: File): Promise<void> {
+  if (blockedByReadOnly()) return;
+  try {
+    const fileId = await importCalendar(await file.text(), file.name);
+    const name = getCalendarState().calendars.find((c) => c.fileId === fileId)?.displayName;
+    showToast(`Imported "${name ?? file.name}".`, 'success');
+  } catch (err) {
+    showToast(`Could not import ${file.name}: ${errorMessage(err)}`, 'error');
+  }
+}
+
 async function newCalendar(): Promise<void> {
   if (blockedByReadOnly()) return;
   const name = await promptText({
@@ -696,6 +708,7 @@ function mountMain(): void {
     onRenameCalendar: renameOne,
     onNewCalendar: () => void newCalendar(),
     onSubscribe: () => void subscribe(),
+    onImport: (file) => void importFile(file),
     onSetCorsProxy: () => void setCorsProxy(),
     onPickSearchResult: pickSearchResult,
     onToggleOfflineCache: (enabled) => void toggleOfflineCache(enabled),

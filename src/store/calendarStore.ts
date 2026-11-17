@@ -584,6 +584,27 @@ export async function createCalendar(name: string): Promise<string> {
   return meta.id;
 }
 
+/**
+ * Imports the text of an .ics file as a new calendar file in the folder (its name: X-WR-CALNAME,
+ * else the file name). Throws if the text isn't a valid calendar. Returns the new file ID.
+ */
+export async function importCalendar(text: string, fileName: string): Promise<string> {
+  const vcalendar = parseIcs(text);
+  const name = calendarDisplayName(vcalendar, fileName);
+  assertWritable();
+  if (!state.folderId) throw new Error(`Load a folder from ${storage().label} first.`);
+  const generation = loadGeneration;
+  renameCalendarComponent(vcalendar, name);
+  const content = serializeCalendar(vcalendar);
+  const meta: FileMeta = await storage().create(state.folderId, fileNameFor(name), content);
+  if (generation !== loadGeneration) return meta.id;
+  setState({
+    calendars: [...state.calendars, toCalendarFile(meta, content)].sort(byName),
+    warnings: state.warnings.filter((w) => !w.startsWith('No .ics files')),
+  });
+  return meta.id;
+}
+
 /** Renames a calendar (its X-WR-CALNAME; the file name on Drive stays the same). */
 export function renameCalendar(fileId: string, name: string): void {
   const trimmed = name.trim();

@@ -157,6 +157,41 @@ describe('refresh, calendars and search', () => {
     expect(store.getCalendarState().calendars.map((c) => c.displayName)).toContain('work');
   });
 
+  it('imports an .ics file as a new calendar named after its X-WR-CALNAME', async () => {
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//test//EN',
+      'X-WR-CALNAME:Holidays',
+      'BEGIN:VEVENT',
+      'UID:imp-1',
+      'DTSTAMP:20260101T000000Z',
+      'DTSTART;VALUE=DATE:20260710',
+      'SUMMARY:Trip',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const id = await store.importCalendar(ics, 'whatever.ics');
+    expect(fake.files.get(id)?.name).toBe('Holidays.ics');
+    expect(fake.files.get(id)?.content).toContain('SUMMARY:Trip');
+    expect(store.getCalendarState().calendars.map((c) => c.displayName)).toContain('Holidays');
+  });
+
+  it('names an imported calendar after the file when it has no X-WR-CALNAME', async () => {
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN', 'END:VCALENDAR'].join(
+      '\r\n',
+    );
+    const id = await store.importCalendar(ics, 'school.ics');
+    expect(fake.files.get(id)?.name).toBe('school.ics');
+    expect(fake.files.get(id)?.content).toContain('X-WR-CALNAME:school');
+  });
+
+  it('rejects an invalid .ics file without creating anything', async () => {
+    const before = fake.files.size;
+    await expect(store.importCalendar('not a calendar', 'bad.ics')).rejects.toThrow();
+    expect(fake.files.size).toBe(before);
+  });
+
   it('renames a calendar through X-WR-CALNAME', async () => {
     store.renameCalendar('cal-1', 'Office');
     await settle();

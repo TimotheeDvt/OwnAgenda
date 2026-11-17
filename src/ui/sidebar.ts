@@ -28,6 +28,8 @@ export interface SidebarActions {
   onRenameCalendar(fileId: string, name: string): void;
   onNewCalendar(): void;
   onSubscribe(): void;
+  /** Imports the chosen .ics file as a new calendar. */
+  onImport(file: File): void;
   onSetCorsProxy(): void;
   onPickSearchResult(event: AgendaEvent): void;
   onToggleOfflineCache(enabled: boolean): void;
@@ -361,7 +363,24 @@ function renderAddButtons(actions: SidebarActions, state: CalendarState): HTMLEl
   if (!state.folderId || state.readOnly) return [];
   const subscribe = button('+ Subscribe', 'btn btn-small', actions.onSubscribe);
   subscribe.title = 'Add an online calendar (e.g. your university timetable) from its .ics link';
-  return [button('+ New calendar', 'btn btn-small', actions.onNewCalendar), subscribe];
+  // The button opens the browser's file chooser (a hidden input).
+  const input = el('input');
+  input.type = 'file';
+  input.accept = '.ics,text/calendar';
+  input.hidden = true;
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) actions.onImport(file);
+  });
+  const importButton = button('+ Import .ics', 'btn btn-small', () => input.click());
+  importButton.title = 'Add the events of an .ics file from your device as a new calendar';
+  return [
+    button('+ New calendar', 'btn btn-small', actions.onNewCalendar),
+    subscribe,
+    importButton,
+    input,
+  ];
 }
 
 /** Icon-only tools pinned to the bottom of the sidebar, sharing its full width. */
