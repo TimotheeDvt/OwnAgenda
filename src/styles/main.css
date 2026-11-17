@@ -2165,10 +2165,26 @@ body.is-resizing-sidebar {
 .sidebar-add .btn {
   flex: 1;
   min-width: 0;
-  padding: 6px 8px;
+  height: 32px;
+  padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sidebar-add .btn-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+
+.sidebar-add .btn-icon svg {
+  display: block;
+  width: 17px;
+  height: 17px;
 }
 
 /* Read-only warning in the header corner (offline / session expired). */

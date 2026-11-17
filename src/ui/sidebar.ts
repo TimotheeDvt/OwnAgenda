@@ -361,8 +361,14 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 /** Buttons to add a calendar, once a Drive folder is loaded (they create files in it). */
 function renderAddButtons(actions: SidebarActions, state: CalendarState): HTMLElement[] {
   if (!state.folderId || state.readOnly) return [];
-  const subscribe = button('+ Subscribe', 'btn btn-small', actions.onSubscribe);
-  subscribe.title = 'Add an online calendar (e.g. your university timetable) from its .ics link';
+  const newEmpty = button('New empty', 'btn btn-small', actions.onNewCalendar);
+  newEmpty.title = 'Create a new, empty calendar';
+  // Icon-only: the globe (an online calendar, as on subscribed calendars).
+  const subscribe = button('', 'btn btn-small btn-icon', actions.onSubscribe);
+  subscribe.innerHTML = ICONS.globe;
+  subscribe.title =
+    'Subscribe to an online calendar (e.g. your university timetable) from its .ics link';
+  subscribe.setAttribute('aria-label', 'Subscribe to an online calendar');
   // The button opens the browser's file chooser (a hidden input).
   const input = el('input');
   input.type = 'file';
@@ -373,14 +379,12 @@ function renderAddButtons(actions: SidebarActions, state: CalendarState): HTMLEl
     input.value = '';
     if (file) actions.onImport(file);
   });
-  const importButton = button('+ Import .ics', 'btn btn-small', () => input.click());
-  importButton.title = 'Add the events of an .ics file from your device as a new calendar';
-  return [
-    button('+ New calendar', 'btn btn-small', actions.onNewCalendar),
-    subscribe,
-    importButton,
-    input,
-  ];
+  // Icon-only: a file with a "+".
+  const importButton = button('', 'btn btn-small btn-icon', () => input.click());
+  importButton.innerHTML = ICONS.filePlus;
+  importButton.title = 'Import an .ics file from your device as a new calendar';
+  importButton.setAttribute('aria-label', 'Import an .ics file');
+  return [newEmpty, subscribe, importButton, input];
 }
 
 /** Icon-only tools pinned to the bottom of the sidebar, sharing its full width. */
