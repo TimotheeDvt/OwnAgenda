@@ -271,6 +271,17 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     visible.setAttribute('aria-pressed', String(settings.visible));
     if (!settings.visible) item.classList.add('is-hidden');
 
+    // Dots-only toggle, before the eye: events hidden, a dot per day that has one.
+    const dots = iconButton(
+      settings.dotsOnly ? 'dot' : 'dotOff',
+      settings.dotsOnly
+        ? `Show the events of ${calendar.displayName}`
+        : `Show only a dot per day for ${calendar.displayName}`,
+      () => updateCalendarSettings(calendar.fileId, index, { dotsOnly: !settings.dotsOnly }),
+    );
+    dots.classList.add('dots-toggle');
+    dots.setAttribute('aria-pressed', String(settings.dotsOnly));
+
     // Color square with the calendar's icon inside; opens the color & icon picker.
     const color = el('button', 'calendar-color', settings.icon);
     color.type = 'button';
@@ -286,6 +297,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
         color: settings.color,
         icon: settings.icon,
         textColor: settings.textColor,
+        dotsToggle: settings.dotsToggle,
         onChange: (patch) => updateCalendarSettings(calendar.fileId, index, patch),
         // Renaming changes the file: not while read-only.
         onRename: state.readOnly
@@ -328,8 +340,9 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
     const tools = el('span', 'calendar-tools');
     // Read-only (offline / session expired): only showing/hiding stays available.
-    if (state.readOnly) tools.append(visible);
-    else tools.append(visible, refresh);
+    const dotsButton = settings.dotsToggle ? [dots] : [];
+    if (state.readOnly) tools.append(...dotsButton, visible);
+    else tools.append(...dotsButton, visible, refresh);
     item.append(handle, color, label, tools);
     list.appendChild(item);
   });

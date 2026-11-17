@@ -21,6 +21,14 @@ export interface CalendarSettings {
   icon: string;
   /** Color of event text and icons on this calendar's color; "" = automatic (best contrast). */
   textColor: string;
+  /** Shows the "dots only" button on the calendar's row in the sidebar (picker switch). */
+  dotsToggle: boolean;
+  /**
+   * "Dots only" (switched with that button): the calendar's events are hidden and a dot of its
+   * color marks, in the day cells, each day that has an event of this calendar. Only applies
+   * while `dotsToggle` is on.
+   */
+  dotsOnly: boolean;
 }
 
 /** Longest icon accepted (emoji with modifiers/joiners take several UTF-16 units). */
@@ -124,6 +132,8 @@ export function normalizeSettings(raw: unknown): Settings {
           typeof value.textColor === 'string' && HEX_COLOR.test(value.textColor)
             ? value.textColor
             : '',
+        dotsToggle: value.dotsToggle === true,
+        dotsOnly: value.dotsOnly === true,
       };
     }
   }
@@ -273,6 +283,9 @@ export function getCalendarSettings(fileId: string, index: number): CalendarSett
     color: saved?.color || fallbackColor,
     icon: saved?.icon ?? '',
     textColor: saved?.textColor ?? '',
+    dotsToggle: saved?.dotsToggle === true,
+    // The feature being off means the events are shown, whatever was chosen before.
+    dotsOnly: saved?.dotsToggle === true && saved.dotsOnly === true,
   };
 }
 

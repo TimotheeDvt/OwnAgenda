@@ -25,7 +25,10 @@ function nowState(now: Date): NowState {
   if (getCalendarState().status !== 'ready') return { current: [], next: [] };
   const events = eventsInRange(
     { start: now, end: new Date(now.getTime() + LOOKAHEAD_MS) },
-    (cal) => getCalendarSettings(cal.fileId, calendarIndex(cal.fileId)).visible,
+    (cal) => {
+      const { visible, dotsOnly } = getCalendarSettings(cal.fileId, calendarIndex(cal.fileId));
+      return visible && !dotsOnly;
+    },
   ).filter((e) => !e.allDay && now < e.end);
   const current = events
     .filter((e) => e.start <= now)

@@ -19,6 +19,8 @@ export interface CalendarStyle {
   icon: string;
   /** "" = automatic. */
   textColor: string;
+  /** The "dots only" button is available on the calendar's row. */
+  dotsToggle: boolean;
 }
 
 export interface StylePickerOptions extends CalendarStyle {
@@ -41,7 +43,7 @@ let openPicker: { close(): void } | null = null;
  */
 export function openCalendarStylePicker(options: StylePickerOptions): void {
   openPicker?.close();
-  let { color, icon, textColor } = options;
+  let { color, icon, textColor, dotsToggle } = options;
 
   const panel = document.createElement('div');
   panel.className = 'style-picker';
@@ -150,6 +152,25 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     if (value) setIcon(value, false);
   });
 
+  // "Dots only" switch.
+  const dotsLabel = document.createElement('label');
+  dotsLabel.className = 'style-switch';
+  const dotsInput = document.createElement('input');
+  dotsInput.type = 'checkbox';
+  dotsInput.role = 'switch';
+  dotsInput.className = 'style-switch-input';
+  dotsInput.addEventListener('change', () => {
+    dotsToggle = dotsInput.checked;
+    options.onChange({ dotsToggle });
+  });
+  const dotsTrack = document.createElement('span');
+  dotsTrack.className = 'style-switch-track';
+  const dotsText = document.createElement('span');
+  dotsText.textContent = 'Dots-only button';
+  dotsLabel.title =
+    "Adds a button on the calendar's row to hide its events and show only a dot per day.";
+  dotsLabel.append(dotsInput, dotsTrack, dotsText);
+
   if (options.onRename) panel.append(heading('Name'), nameInput);
   panel.append(
     heading('Color'),
@@ -160,6 +181,8 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     heading('Icon'),
     grid,
     iconInput,
+    heading('Display'),
+    dotsLabel,
   );
 
   function sync() {
@@ -178,6 +201,7 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
       btn.classList.toggle('is-selected', selected);
       btn.setAttribute('aria-pressed', String(selected));
     }
+    dotsInput.checked = dotsToggle;
     none.classList.toggle('is-selected', icon === '');
     for (const { btn, emoji } of iconButtons) btn.classList.toggle('is-selected', emoji === icon);
   }

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  applyCachedSettings,
   defaultSettings,
   effectiveTextColor,
+  getCalendarSettings,
   getSettings,
   moveCalendar,
   normalizeIcon,
@@ -49,7 +51,36 @@ describe('normalizeSettings', () => {
     expect(s.weekStartsOn).toBe(d.weekStartsOn);
     expect(s.timeZone).toBe(d.timeZone);
     expect(s.theme).toBe(d.theme);
-    expect(s.calendars).toEqual({ abc: { color: '', visible: true, icon: '', textColor: '' } });
+    expect(s.calendars).toEqual({
+      abc: {
+        color: '',
+        visible: true,
+        icon: '',
+        textColor: '',
+        dotsToggle: false,
+        dotsOnly: false,
+      },
+    });
+  });
+
+  it('keeps dotsToggle and dotsOnly only when exactly true', () => {
+    const s = normalizeSettings({
+      calendars: {
+        a: { dotsToggle: true, dotsOnly: true },
+        b: { dotsToggle: 'yes', dotsOnly: 'yes' },
+        c: {},
+      },
+    });
+    expect(s.calendars.a).toMatchObject({ dotsToggle: true, dotsOnly: true });
+    expect(s.calendars.b).toMatchObject({ dotsToggle: false, dotsOnly: false });
+    expect(s.calendars.c).toMatchObject({ dotsToggle: false, dotsOnly: false });
+  });
+
+  it('only applies dotsOnly while the dots button is enabled', () => {
+    applyCachedSettings({ calendars: { x: { dotsToggle: false, dotsOnly: true } } });
+    expect(getCalendarSettings('x', 0).dotsOnly).toBe(false);
+    applyCachedSettings({ calendars: { x: { dotsToggle: true, dotsOnly: true } } });
+    expect(getCalendarSettings('x', 0).dotsOnly).toBe(true);
   });
 
   it('preserves unknown fields so newer settings are not lost', () => {

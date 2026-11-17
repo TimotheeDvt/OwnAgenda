@@ -30,6 +30,7 @@ import {
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { instantToWall, isoWeek } from '../util/dates';
+import { eventDays } from '../util/dotDays';
 import {
   changeEventTimes,
   copyEventTo,
@@ -333,6 +334,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
 
   // An event being dragged or resized: the finger moving is not a swipe.
   let dragging = false;
+  /** Days with an event of a dots-only calendar, from the last fetch: day → calendars' dots. */
+  let dotDays = new Map<string, Map<string, { color: string; name: string }>>();
   // The drop being handled is a copy (see eventDrop).
   let copyOnDrop = false;
   // While dragging an event, the cursor shows when dropping will copy it (Ctrl / Alt / ⌘ held).
@@ -410,7 +413,10 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     weekNumbers: true,
     weekNumberCalculation: 'ISO',
     weekNumberContent: ({ num }) => ({ domNodes: [weekNumberBadge(num)] }),
-    eventsSet: () => requestAnimationFrame(syncListWeekNumbers),
+    eventsSet: () => {
+      requestAnimationFrame(syncListWeekNumbers);
+      syncDots();
+    },
     // 24-hour clock everywhere (time axis, event times, list view).
     slotLabelFormat: slotLabelFormat(),
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
@@ -478,10 +484,35 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       });
     },
     events: (info, success) => {
-      let events = eventsInRange(
+      const all = eventsInRange(
         { start: info.start, end: info.end },
         (cal) => getCalendarSettings(cal.fileId, calendarIndex(cal.fileId)).visible,
       );
+      // Calendars shown as dots only: no event, just their days (see syncDots).
+      let events: AgendaEvent[] = [];
+      const days = new Map<string, Map<string, { color: string; name: string }>>();
+      const { timeZone } = getSettings();
+      const dayOf = (instant: Date) => instantToWall(instant.getTime(), timeZone).date;
+      for (const event of all) {
+        const style = getCalendarSettings(
+          event.calendarFileId,
+          calendarIndex(event.calendarFileId),
+        );
+        if (!style.dotsOnly) {
+          events.push(event);
+          continue;
+        }
+        if (!getSettings().showGhosts && isGhostEvent(event)) continue;
+        const name =
+          getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId)
+            ?.displayName ?? '';
+        for (const day of eventDays(event, dayOf)) {
+          const dots = days.get(day) ?? new Map();
+          dots.set(event.calendarFileId, { color: style.color, name });
+          days.set(day, dots);
+        }
+      }
+      dotDays = days;
       // The list is an agenda of what's ahead: hide events that are already over (ongoing ones
       // stay, and full-day events stay until the day ends).
       if (currentView.startsWith('list')) events = upcomingOnly(events, new Date());
@@ -558,6 +589,32 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     },
   });
   calendar.render();
+
+  /** One dot per dots-only calendar with an event, in each day cell (month) or column header. */
+  function syncDots(): void {
+    host.querySelectorAll('.day-dots').forEach((el) => el.remove());
+    const type = calendar.view.type;
+    if (type.startsWith('list')) return;
+    const month = type.startsWith('dayGrid');
+    const targets = month
+      ? host.querySelectorAll<HTMLElement>('.fc-daygrid-day[data-date]')
+      : host.querySelectorAll<HTMLElement>('.fc-col-header-cell[data-date]');
+    for (const target of targets) {
+      const dots = dotDays.get(target.dataset.date ?? '');
+      if (!dots) continue;
+      const row = document.createElement('span');
+      row.className = 'day-dots';
+      for (const { color, name } of dots.values()) {
+        const dot = document.createElement('span');
+        dot.className = 'day-dot';
+        dot.style.background = color;
+        dot.title = name;
+        row.appendChild(dot);
+      }
+      if (month) target.querySelector('.fc-daygrid-day-top')?.appendChild(row);
+      else target.querySelector('.day-header-label')?.appendChild(row);
+    }
+  }
 
   /** List view: "43" at the left of the first row of each week (rows are only days with events). */
   function syncListWeekNumbers(): void {

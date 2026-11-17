@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { defaultSettings, type Settings } from '../src/store/settingsStore';
 import { exportSettings, importSettings } from '../src/store/settingsTransfer';
 
-const style = (color: string) => ({ color, visible: true, icon: '', textColor: '' });
+const style = (color: string) => ({
+  color,
+  visible: true,
+  icon: '',
+  textColor: '',
+  dotsToggle: false,
+  dotsOnly: false,
+});
 
 // Google Drive IDs on one side, Solid URLs (containing "/") on the other.
 const DRIVE = [
@@ -26,7 +33,13 @@ function driveSettings(): Settings {
     calendarOrder: ['drive-family', 'drive-work', 'drive-old'],
     calendars: {
       'drive-work': style('#111111'),
-      'drive-family': { ...style('#222222'), icon: '🏠', visible: false },
+      'drive-family': {
+        ...style('#222222'),
+        icon: '🏠',
+        visible: false,
+        dotsToggle: true,
+        dotsOnly: true,
+      },
       'drive-old': style('#333333'),
     },
     ghostEvents: [
@@ -75,7 +88,12 @@ describe('settings import', () => {
     expect(matched).toEqual(['family.ics', 'work.ics']);
     expect(missing).toEqual(['old.ics']);
 
-    expect(settings.calendars[`${POD}family.ics`]).toMatchObject({ icon: '🏠', visible: false });
+    expect(settings.calendars[`${POD}family.ics`]).toMatchObject({
+      icon: '🏠',
+      visible: false,
+      dotsToggle: true,
+      dotsOnly: true,
+    });
     expect(settings.calendars[`${POD}work.ics`]?.color).toBe('#111111');
     // Calendars only known here keep their settings and come after the imported order.
     expect(settings.calendars[`${POD}school.ics`]?.color).toBe('#444444');
