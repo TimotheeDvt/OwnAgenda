@@ -27,8 +27,6 @@ jobs:
 
       - run: npm ci
 
-      - run: npm test
-
       - name: Build
         run: npm run build
         env:
@@ -43,8 +41,23 @@ jobs:
         with:
           path: dist
 
+  # Runs in parallel with the build; the deploy needs both to pass.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
   deploy:
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
