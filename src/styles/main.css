@@ -2665,6 +2665,12 @@ body.is-resizing-sidebar {
   border-radius: 50%;
 }
 
+/* The calendar's icon (when it has one) in its color, in place of the dot. */
+.calendar-host.fc .day-icon {
+  font-size: 0.9em;
+  line-height: 1;
+}
+
 /* Toggle switch of the style picker. */
 .style-switch {
   display: flex;

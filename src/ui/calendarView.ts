@@ -42,7 +42,12 @@ import {
   undoLastChange,
   type EventTimes,
 } from './eventActions';
-import { attachEventTooltip, detachEventTooltip, eventTooltipContent } from './eventTooltip';
+import {
+  attachEventTooltip,
+  detachEventTooltip,
+  eventListTooltipContent,
+  eventTooltipContent,
+} from './eventTooltip';
 import { captureToClipboard } from './captureView';
 import { openMonthPicker } from './monthPicker';
 import { openViewMenu } from './viewMenu';
@@ -194,6 +199,14 @@ function weekNumberBadge(week: number): HTMLSpanElement {
   return badge;
 }
 
+/** What a dots-only calendar shows on one day: its dot (or icon) and the events behind it. */
+interface DayDot {
+  color: string;
+  icon: string;
+  name: string;
+  events: AgendaEvent[];
+}
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The view and date kept in the URL (?view=week&date=YYYY-MM-DD), so a reload stays there. */
@@ -335,7 +348,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   // An event being dragged or resized: the finger moving is not a swipe.
   let dragging = false;
   /** Days with an event of a dots-only calendar, from the last fetch: day → calendars' dots. */
-  let dotDays = new Map<string, Map<string, { color: string; name: string }>>();
+  let dotDays = new Map<string, Map<string, DayDot>>();
   // The drop being handled is a copy (see eventDrop).
   let copyOnDrop = false;
   // While dragging an event, the cursor shows when dropping will copy it (Ctrl / Alt / ⌘ held).
@@ -490,7 +503,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       );
       // Calendars shown as dots only: no event, just their days (see syncDots).
       let events: AgendaEvent[] = [];
-      const days = new Map<string, Map<string, { color: string; name: string }>>();
+      const days = new Map<string, Map<string, DayDot>>();
       const { timeZone } = getSettings();
       const dayOf = (instant: Date) => instantToWall(instant.getTime(), timeZone).date;
       for (const event of all) {
@@ -508,7 +521,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
             ?.displayName ?? '';
         for (const day of eventDays(event, dayOf)) {
           const dots = days.get(day) ?? new Map();
-          dots.set(event.calendarFileId, { color: style.color, name });
+          const dot = dots.get(event.calendarFileId) ?? {
+            color: style.color,
+            icon: style.icon,
+            name,
+            events: [],
+          };
+          dot.events.push(event);
+          dots.set(event.calendarFileId, dot);
           days.set(day, dots);
         }
       }
@@ -592,6 +612,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
 
   /** One dot per dots-only calendar with an event, in each day cell (month) or column header. */
   function syncDots(): void {
+    host
+      .querySelectorAll('.day-dot, .day-icon')
+      .forEach((el) => detachEventTooltip(el as HTMLElement));
     host.querySelectorAll('.day-dots').forEach((el) => el.remove());
     const type = calendar.view.type;
     if (type.startsWith('list')) return;
@@ -604,11 +627,27 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       if (!dots) continue;
       const row = document.createElement('span');
       row.className = 'day-dots';
-      for (const { color, name } of dots.values()) {
+      for (const { color, icon, name, events } of dots.values()) {
         const dot = document.createElement('span');
-        dot.className = 'day-dot';
-        dot.style.background = color;
-        dot.title = name;
+        dot.setAttribute('role', 'img');
+        dot.setAttribute(
+          'aria-label',
+          `${name}: ${events.length} event${events.length > 1 ? 's' : ''}`,
+        );
+        // One event: the usual event card; several: their names.
+        const [only] = events;
+        attachEventTooltip(dot, () =>
+          events.length === 1 && only ? eventTooltipContent(only) : eventListTooltipContent(events),
+        );
+        if (icon) {
+          // The calendar's icon, in its color, instead of a dot.
+          dot.className = 'day-icon';
+          dot.textContent = icon;
+          dot.style.color = color;
+        } else {
+          dot.className = 'day-dot';
+          dot.style.background = color;
+        }
         row.appendChild(dot);
       }
       if (month) target.querySelector('.fc-daygrid-day-top')?.appendChild(row);

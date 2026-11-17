@@ -12,6 +12,20 @@ export interface EventTooltipContent {
   lines: (string | undefined)[];
 }
 
+/** Hover card of a day's several events of a dots-only calendar: their names, one per line. */
+export function eventListTooltipContent(events: AgendaEvent[]): EventTooltipContent {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === events[0]?.calendarFileId);
+  return {
+    title: `${events.length} events`,
+    when: '',
+    calendar: calendar && {
+      name: calendar.displayName,
+      color: getCalendarSettings(calendar.fileId, calendarIndex(calendar.fileId)).color,
+    },
+    lines: events.map((e) => e.title || '(No title)'),
+  };
+}
+
 /** Hover card contents of an event: title, when, calendar, repeat, location and notes. */
 export function eventTooltipContent(event: AgendaEvent): EventTooltipContent {
   const calendar = getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId);
@@ -55,7 +69,10 @@ function build(content: EventTooltipContent): HTMLDivElement {
   const when = document.createElement('div');
   when.className = 'event-tooltip-when';
   when.textContent = content.when;
-  el.append(title, when);
+  el.append(title);
+  if (content.when) {
+    el.append(when);
+  }
   if (content.calendar) {
     const calendar = document.createElement('div');
     calendar.className = 'event-tooltip-calendar';
