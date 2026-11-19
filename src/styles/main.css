@@ -2706,8 +2706,11 @@ body.is-resizing-sidebar {
 .calendar-host.fc .day-icon {
   font-size: 0.9em;
   line-height: 1;
-  /* Thin contour in the text color, like the dots' border (works on emoji; --contour = its width).
-     text-shadow layers don't add up like chained drop-shadow filters do. */
+}
+
+/* Dark icons only (set in syncDots): thin contour in the text color, like the dots' border.
+   Works on emoji; text-shadow layers don't add up like chained drop-shadows. --contour = width. */
+.calendar-host.fc .day-icon.is-dark {
   --contour: 0.1px;
   text-shadow:
     var(--contour) 0 0 var(--text),

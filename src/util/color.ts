@@ -49,3 +49,11 @@ export function readableTextColor(background: string): string {
   const light = Math.abs(apcaContrast(LIGHT_TEXT, background));
   return dark > light ? DARK_TEXT : LIGHT_TEXT;
 }
+
+/**
+ * True for colors that are hard to see on a dark page (black, navy…): APCA contrast against the
+ * dark theme's text-on-dark-background is low. Used to outline such icons.
+ */
+export function isHardOnDark(color: string): boolean {
+  return Math.abs(apcaContrast(color, DARK_TEXT)) < 20;
+}

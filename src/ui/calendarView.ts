@@ -30,6 +30,7 @@ import {
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
+import { isHardOnDark } from '../util/color';
 import { instantToWall, isoWeek } from '../util/dates';
 import { eventDays } from '../util/dotDays';
 import {
@@ -671,6 +672,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
           dot.className = 'day-icon';
           dot.textContent = icon;
           dot.style.color = color;
+          // Dark icons get an outline (see .day-icon.is-dark); light ones are visible already.
+          dot.classList.toggle('is-dark', isHardOnDark(color));
         } else {
           dot.className = 'day-dot';
           dot.style.background = color;
