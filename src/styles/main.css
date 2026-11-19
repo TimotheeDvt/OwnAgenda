@@ -245,7 +245,7 @@ code {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 16px 0;
 }
 
 .sidebar-footer {
