@@ -4,6 +4,7 @@ import {
   getCalendarState,
   onCalendarsChange,
 } from '../store/calendarStore';
+import { isGhostEvent } from '../store/ghostEvents';
 import { getCalendarSettings, getSettings, onSettingsChange } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
 import { formatStartsIn } from '../util/dates';
@@ -29,7 +30,7 @@ function nowState(now: Date): NowState {
       const { visible, dotsOnly } = getCalendarSettings(cal.fileId, calendarIndex(cal.fileId));
       return visible && !dotsOnly;
     },
-  ).filter((e) => !e.allDay && now < e.end);
+  ).filter((e) => !e.allDay && now < e.end && !isGhostEvent(e));
   const current = events
     .filter((e) => e.start <= now)
     .sort((a, b) => a.end.getTime() - b.end.getTime());
