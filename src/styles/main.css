@@ -1826,7 +1826,7 @@ kbd {
   line-height: 1.6;
 }
 
-/* Two weeks view: the date with its month name, on the first day and on the first of a month
+/* Three weeks view: the date with its month name, on the first day and on the first of a month
    ("1 November"), small and discreet instead of FullCalendar's larger bold label. */
 .calendar-host.fc .fc-dayGridTwoWeek-view .fc-daygrid-month-start {
   font-size: 0.8em;
@@ -2679,6 +2679,18 @@ body.is-resizing-sidebar {
   height: 9px;
   border: 1.5px solid var(--text);
   border-radius: 50%;
+}
+
+/* Year view: small cells, so smaller dots tucked in the cell. */
+.calendar-host.fc .fc-multimonth .day-dots {
+  gap: 2px;
+  margin: 0 2px;
+}
+
+.calendar-host.fc .fc-multimonth .day-dot {
+  width: 7px;
+  height: 7px;
+  border-width: 1px;
 }
 
 /* The calendar's icon (when it has one) in its color, in place of the dot. */

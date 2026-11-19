@@ -19,6 +19,7 @@
     "@fullcalendar/daygrid": "^6.1.22",
     "@fullcalendar/interaction": "^6.1.22",
     "@fullcalendar/list": "^6.1.22",
+    "@fullcalendar/multimonth": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
     "@inrupt/solid-client-authn-browser": "5.0.1",
     "@mdi/font": "^7.4.47",

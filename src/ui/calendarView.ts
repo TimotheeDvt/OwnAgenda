@@ -8,6 +8,7 @@ import {
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
+import multiMonthPlugin from '@fullcalendar/multimonth';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import {
   calendarIndex,
@@ -70,21 +71,23 @@ export const NARROW_QUERY = '(max-width: 720px)';
 
 /** One button per view on computers; phones get every view (3 days too) in a menu. */
 const WIDE_VIEW_BUTTONS: ViewName[] = [
+  'listWeek',
+  'multiMonthYear',
   'dayGridMonth',
   'dayGridThreeWeek',
   'timeGridWeek',
   'timeGridDay',
-  'listWeek',
 ];
 
 /** Menu labels, and the short names used in the URL. */
 const VIEWS: Record<ViewName, { label: string; url: string }> = {
   dayGridMonth: { label: 'Month', url: 'month' },
-  dayGridThreeWeek: { label: 'Two weeks', url: '2weeks' },
+  dayGridThreeWeek: { label: '3 weeks', url: '3weeks' },
   timeGridWeek: { label: 'Week', url: 'week' },
   timeGrid3Day: { label: '3 days', url: '3days' },
   timeGridDay: { label: 'Day', url: 'day' },
   listWeek: { label: 'List', url: 'list' },
+  multiMonthYear: { label: 'Year', url: 'year' },
 };
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
@@ -369,7 +372,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   const fromUrl = readUrlPosition();
   let currentView: string = fromUrl.view ?? initial.defaultView;
   const calendar = new Calendar(host, {
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, intlTimeZonePlugin],
+    plugins: [
+      dayGridPlugin,
+      timeGridPlugin,
+      listPlugin,
+      multiMonthPlugin,
+      interactionPlugin,
+      intlTimeZonePlugin,
+    ],
     initialView: currentView,
     // Reloading the page stays on the period that was shown (see writeUrlPosition).
     ...(fromUrl.date ? { initialDate: fromUrl.date } : {}),
@@ -379,7 +389,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     timeZone: initial.timeZone,
     headerToolbar: toolbar().header,
     footerToolbar: toolbar().footer,
-    buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
+    buttonText: {
+      today: 'Today',
+      month: 'Month',
+      week: 'Week',
+      day: 'Day',
+      list: 'List',
+      year: 'Year',
+    },
     customButtons: {
       // Camera icon (CSS); copies the view, like a screenshot of it, to the clipboard.
       capture: {
@@ -417,6 +434,14 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         displayEventTime: false,
       },
       timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } },
+      // The whole year, twelve small months: only dots (see the events source and syncDots).
+      multiMonthYear: {
+        multiMonthMaxColumns: 4,
+        multiMonthMinWidth: 240,
+        weekNumbers: false,
+        // Only the weeks the month has, not always six rows.
+        fixedWeekCount: false,
+      },
     },
     // No label next to the all-day row.
     allDayText: '',
@@ -505,13 +530,15 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       let events: AgendaEvent[] = [];
       const days = new Map<string, Map<string, DayDot>>();
       const { timeZone } = getSettings();
+      // Year view: every calendar is shown as dots only.
+      const yearView = currentView === 'multiMonthYear';
       const dayOf = (instant: Date) => instantToWall(instant.getTime(), timeZone).date;
       for (const event of all) {
         const style = getCalendarSettings(
           event.calendarFileId,
           calendarIndex(event.calendarFileId),
         );
-        if (!style.dotsOnly) {
+        if (!style.dotsOnly && !yearView) {
           events.push(event);
           continue;
         }
@@ -618,7 +645,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     host.querySelectorAll('.day-dots').forEach((el) => el.remove());
     const type = calendar.view.type;
     if (type.startsWith('list')) return;
-    const month = type.startsWith('dayGrid');
+    const month = type.startsWith('dayGrid') || type.startsWith('multiMonth');
     const targets = month
       ? host.querySelectorAll<HTMLElement>('.fc-daygrid-day[data-date]')
       : host.querySelectorAll<HTMLElement>('.fc-col-header-cell[data-date]');

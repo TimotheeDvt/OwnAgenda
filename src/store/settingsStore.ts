@@ -4,12 +4,13 @@ import { readableTextColor } from '../util/color';
 import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
 export const VIEW_NAMES = [
+  'listWeek',
+  'multiMonthYear',
   'dayGridMonth',
   'dayGridThreeWeek',
   'timeGridWeek',
   'timeGrid3Day',
   'timeGridDay',
-  'listWeek',
 ] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
 export type Theme = 'system' | 'light' | 'dark';
