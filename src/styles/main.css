@@ -2775,3 +2775,8 @@ body.is-resizing-sidebar {
     transition: none;
   }
 }
+
+.style-delete {
+  margin-top: 12px;
+  width: 100%;
+}

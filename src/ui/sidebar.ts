@@ -27,6 +27,7 @@ export interface SidebarActions {
   onRefreshCalendar(fileId: string): void;
   onRenameCalendar(fileId: string, name: string): void;
   onNewCalendar(): void;
+  onDeleteCalendar(fileId: string): void;
   onSubscribe(): void;
   /** Imports the chosen .ics file as a new calendar. */
   onImport(file: File): void;
@@ -305,6 +306,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
         onRename: state.readOnly
           ? undefined
           : (newName) => actions.onRenameCalendar(calendar.fileId, newName),
+        onDelete: state.readOnly ? undefined : () => actions.onDeleteCalendar(calendar.fileId),
       }),
     );
 

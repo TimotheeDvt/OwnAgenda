@@ -605,6 +605,23 @@ export async function importCalendar(text: string, fileName: string): Promise<st
   return meta.id;
 }
 
+/** Deletes a calendar's file from the storage, then removes it from the loaded calendars. */
+export async function deleteCalendar(fileId: string): Promise<void> {
+  assertWritable();
+  requireCalendar(fileId);
+  const generation = loadGeneration;
+  // A save still running would upload to a file that is about to disappear.
+  await runningSaves.get(fileId)?.catch(() => {});
+  await storage().delete(fileId);
+  if (generation !== loadGeneration) return;
+  editVersions.delete(fileId);
+  saveErrors.delete(fileId);
+  pendingResaves.delete(fileId);
+  forgetHistoryOf(fileId);
+  setState({ calendars: state.calendars.filter((c) => c.fileId !== fileId) });
+  updateSaveStatus();
+}
+
 /** Renames a calendar (its X-WR-CALNAME; the file name on Drive stays the same). */
 export function renameCalendar(fileId: string, name: string): void {
   const trimmed = name.trim();

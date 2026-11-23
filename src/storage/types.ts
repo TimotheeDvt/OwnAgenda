@@ -27,6 +27,8 @@ export interface StorageProvider {
   getMeta(fileId: string): Promise<FileMeta>;
   /** Creates a new file in a folder returned by listFiles. */
   create(folderId: string, name: string, content: string): Promise<FileMeta>;
+  /** Removes a file (Google Drive moves it to the trash, so it can still be restored there). */
+  delete(fileId: string): Promise<void>;
 
   /** The app settings (JSON), or null if none were saved yet. */
   readSettings(): Promise<unknown>;

@@ -119,6 +119,18 @@ export function uploadFile(fileId: string, content: string): Promise<DriveFileMe
   );
 }
 
+/** Moves the file to the Drive trash (recoverable for 30 days). */
+export async function trashFile(fileId: string): Promise<void> {
+  await driveJson<DriveFileMeta>(
+    buildUrl(`${DRIVE_API}/files/${encodeURIComponent(fileId)}`, { fields: 'id' }),
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trashed: true }),
+    },
+  );
+}
+
 /** Creates a new .ics file in the folder and returns its metadata. */
 export function createFile(
   folderId: string,

@@ -262,6 +262,17 @@ export const solidProvider: StorageProvider = {
     return getMeta(url);
   },
 
+  async delete(fileId) {
+    try {
+      await podFetch(fileId, { method: 'DELETE' });
+    } catch (err) {
+      // Already gone: the goal is reached.
+      if (!(err instanceof SolidError && err.status === 404)) throw err;
+    }
+    etags.delete(fileId);
+    prefetched.delete(fileId);
+  },
+
   async readSettings() {
     const { storage } = await getProfile();
     let res: Response;

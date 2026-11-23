@@ -72,6 +72,10 @@ export class FakeStorage implements StorageProvider {
     return this.meta(id);
   }
 
+  async delete(fileId: string) {
+    this.files.delete(fileId);
+  }
+
   async readSettings() {
     return this.settings;
   }

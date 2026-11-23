@@ -6,6 +6,7 @@ import {
   getFileMeta,
   listIcsFiles,
   resolvePath,
+  trashFile,
   uploadFile,
   type DriveFileMeta,
 } from './files';
@@ -38,6 +39,7 @@ export const googleDriveProvider: StorageProvider = {
   upload: async (fileId, content) => toMeta(await uploadFile(fileId, content)),
   getMeta: async (fileId) => toMeta(await getFileMeta(fileId)),
   create: async (folderId, name, content) => toMeta(await createFile(folderId, name, content)),
+  delete: (fileId) => trashFile(fileId),
 
   readSettings: () => readSettings(),
   writeSettings: (settings) => writeSettings(settings),

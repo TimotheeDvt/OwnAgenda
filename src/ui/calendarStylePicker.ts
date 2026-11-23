@@ -30,6 +30,8 @@ export interface StylePickerOptions extends CalendarStyle {
   onChange(patch: Partial<CalendarStyle>): void;
   /** Renames the calendar; without it (read-only) the name can't be edited here. */
   onRename?(name: string): void;
+  /** Deletes the calendar (the caller confirms); without it (read-only) the button is absent. */
+  onDelete?(): void;
 }
 
 let openPicker: { close(): void } | null = null;
@@ -184,6 +186,18 @@ export function openCalendarStylePicker(options: StylePickerOptions): void {
     heading('Display'),
     dotsLabel,
   );
+  if (options.onDelete) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-small btn-danger style-delete';
+    remove.textContent = 'Delete calendar';
+    remove.addEventListener('click', () => {
+      const onDelete = options.onDelete;
+      close();
+      onDelete?.();
+    });
+    panel.append(remove);
+  }
 
   function sync() {
     for (const { btn, preset } of colorButtons) {

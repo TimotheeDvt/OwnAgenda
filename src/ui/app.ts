@@ -17,6 +17,7 @@ import { storage, type StorageUser } from '../storage';
 import {
   clearCalendars,
   createCalendar,
+  deleteCalendar,
   importCalendar,
   errorMessage,
   getCalendarState,
@@ -561,6 +562,28 @@ async function newCalendar(): Promise<void> {
   }
 }
 
+async function deleteOne(fileId: string): Promise<void> {
+  const calendar = getCalendarState().calendars.find((c) => c.fileId === fileId);
+  if (!calendar || blockedByReadOnly()) return;
+  const trash = storage().id === 'google-drive';
+  const choice = await chooseOption(
+    'Delete calendar',
+    `Delete "${calendar.displayName}" and all its events? Its file "${calendar.name}" will be ` +
+      (trash ? `moved to the ${storage().label} trash.` : `removed from your ${storage().label}.`),
+    [
+      { value: 'cancel', label: 'Cancel' },
+      { value: 'delete', label: 'Delete calendar', kind: 'danger' },
+    ],
+  );
+  if (choice !== 'delete') return;
+  try {
+    await deleteCalendar(fileId);
+    showToast(`Calendar "${calendar.displayName}" deleted.`, 'success');
+  } catch (err) {
+    showToast(`Could not delete "${calendar.displayName}": ${errorMessage(err)}`, 'error');
+  }
+}
+
 function renameOne(fileId: string, name: string): void {
   if (blockedByReadOnly()) return;
   try {
@@ -707,6 +730,7 @@ function mountMain(): void {
     onRefreshCalendar: (fileId) => void refreshOne(fileId),
     onRenameCalendar: renameOne,
     onNewCalendar: () => void newCalendar(),
+    onDeleteCalendar: (fileId) => void deleteOne(fileId),
     onSubscribe: () => void subscribe(),
     onImport: (file) => void importFile(file),
     onSetCorsProxy: () => void setCorsProxy(),
