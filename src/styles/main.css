@@ -2101,6 +2101,8 @@ kbd {
 
 .calendar-label {
   cursor: default;
+  /* Double-click shows only this calendar: no text selection with it. */
+  user-select: none;
 }
 
 /* Sidebar resize handle: a thin strip over the sidebar's right border. */

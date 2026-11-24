@@ -11,6 +11,7 @@ import {
   orderCalendars,
   resetSettings,
   isAllHidden,
+  soloCalendar,
   toggleAllCalendars,
   updateSettings,
 } from '../src/store/settingsStore';
@@ -170,6 +171,29 @@ describe('hide all calendars', () => {
       expect(isAllHidden(all)).toBe(true);
       toggleAllCalendars(all); // show all: back to a and c, not b alone
       expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
+    } finally {
+      resetSettings();
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows one calendar alone, and a second double-click restores', () => {
+    vi.useFakeTimers();
+    try {
+      resetSettings();
+      toggleAllCalendars(all);
+      toggleAllCalendars(all);
+      hide('b');
+      soloCalendar(all, 'a');
+      expect(shown().map((c) => c.fileId)).toEqual(['a']);
+      expect(getSettings().shownBeforeHideAll).toEqual(['a', 'c']);
+      // Another one: the first memory is kept.
+      soloCalendar(all, 'b');
+      expect(shown().map((c) => c.fileId)).toEqual(['b']);
+      expect(getSettings().shownBeforeHideAll).toEqual(['a', 'c']);
+      soloCalendar(all, 'b');
+      expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
+      expect(getSettings().shownBeforeHideAll).toBeNull();
     } finally {
       resetSettings();
       vi.useRealTimers();

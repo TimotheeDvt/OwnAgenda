@@ -13,6 +13,7 @@ import {
   moveCalendar,
   onSettingsChange,
   orderCalendars,
+  soloCalendar,
   toggleAllCalendars,
   updateCalendarSettings,
 } from '../store/settingsStore';
@@ -318,6 +319,14 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
 
     const label = el('span', 'calendar-label');
     label.append(name);
+    // Double-click: only this calendar is shown (again: back to how it was).
+    name.title += '\nDouble-click: show only this calendar';
+    label.addEventListener('dblclick', () =>
+      soloCalendar(
+        state.calendars.map((c, i) => ({ fileId: c.fileId, index: i })),
+        calendar.fileId,
+      ),
+    );
     const lastUpdated = subscription
       ? `Last updated: ${subscription.lastUpdate ? timeAgo(subscription.lastUpdate) : 'never'}`
       : '';

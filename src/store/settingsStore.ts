@@ -373,6 +373,36 @@ export function toggleAllCalendars(calendars: { fileId: string; index: number }[
   });
 }
 
+/**
+ * Shows only one calendar (double-click in the sidebar), keeping what was shown before for
+ * "Show calendars again" (the same memory as "Hide all"; an earlier one is not overwritten). On
+ * the calendar that is already shown alone, it restores instead.
+ */
+export function soloCalendar(
+  calendars: { fileId: string; index: number }[],
+  soloId: string,
+): void {
+  const isShown = ({ fileId, index }: { fileId: string; index: number }) =>
+    getCalendarSettings(fileId, index).visible;
+  const shown = calendars.filter(isShown);
+  if (settings.shownBeforeHideAll !== null && shown.length === 1 && shown[0]?.fileId === soloId) {
+    toggleAllCalendars(calendars); // all hidden mode: this restores
+    return;
+  }
+  const next = { ...settings.calendars };
+  for (const { fileId, index } of calendars) {
+    next[fileId] = {
+      ...next[fileId],
+      ...getCalendarSettings(fileId, index),
+      visible: fileId === soloId,
+    };
+  }
+  updateSettings({
+    calendars: next,
+    shownBeforeHideAll: settings.shownBeforeHideAll ?? shown.map((c) => c.fileId),
+  });
+}
+
 /** Writes any pending change immediately. */
 export async function flushSettings(): Promise<void> {
   if (!saveTimer) return;
