@@ -47,7 +47,6 @@ export const DEFAULT_CALENDAR_ICONS: [icon: string, name: string][] = [
   [mdi(0xf0a70), 'restaurant'],
   [mdi(0xf0176), 'coffee'],
   [mdi(0xf0110), 'shopping'],
-  [mdi(0xf001d), 'travel'],
   [mdi(0xf010b), 'car'],
   [mdi(0xf0092), 'beach'],
   [mdi(0xf02e0), 'hospital'],

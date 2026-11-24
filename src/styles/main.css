@@ -2313,8 +2313,6 @@ body.is-resizing-sidebar {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 2px;
-  max-height: 168px;
-  overflow-y: auto;
 }
 
 .style-icon {
