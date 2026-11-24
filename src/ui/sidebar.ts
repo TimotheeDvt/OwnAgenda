@@ -320,6 +320,15 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
     const lastUpdated = subscription
       ? `Last updated: ${subscription.lastUpdate ? timeAgo(subscription.lastUpdate) : 'never'}`
       : '';
+    // Always visible (the toggle may only show on hover): this calendar shows dots only.
+    if (settings.dotsOnly) {
+      const badge = el('span', 'subscription-badge dots-badge');
+      badge.innerHTML = ICONS.dot;
+      badge.setAttribute('role', 'img');
+      badge.setAttribute('aria-label', 'Dots only');
+      badge.title = 'Dots only: events are shown as a dot per day';
+      label.appendChild(badge);
+    }
     if (subscription) {
       const host = hostOf(subscription.url);
       const badge = el('span', 'subscription-badge');
