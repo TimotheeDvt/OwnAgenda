@@ -248,6 +248,16 @@ function fetchModeOf(view: string): string {
   return view === 'multiMonthYear' ? 'year' : view.startsWith('timeGrid') ? 'timeGrid' : 'plain';
 }
 
+/**
+ * Whether events built for `fetched` (a fetchModeOf value) serve `view` as they are. Lists only
+ * draw foreground events, so they also take the week/day grids' events (those add background
+ * ghosts); the other way round, or from the year's dots, the events have to be rebuilt.
+ */
+function canReuseEvents(view: string, fetched: string): boolean {
+  const mode = fetchModeOf(view);
+  return mode === fetched || (view.startsWith('list') && fetched === 'timeGrid');
+}
+
 /** A horizontal swipe at least this long (px) and this quick (ms) changes the period. */
 const SWIPE_MIN_PX = 60;
 const SWIPE_MAX_MS = 600;
@@ -662,7 +672,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       // Same dates in another view reuse the loaded events; reload so the list view can leave
       // out past events (and other views show them again).
       currentView = view;
-      if (fetchModeOf(view) !== fetchedMode) queueMicrotask(() => calendar.refetchEvents());
+      if (!canReuseEvents(view, fetchedMode)) queueMicrotask(() => calendar.refetchEvents());
       if (VIEW_NAMES.includes(view) && view !== getSettings().defaultView) {
         updateSettings({ defaultView: view });
       }
