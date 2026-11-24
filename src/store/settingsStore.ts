@@ -342,14 +342,23 @@ export function updateCalendarSettings(
 }
 
 /**
+ * True while "Hide all calendars" is in effect: nothing is shown, or it was used and its
+ * remembered set is still waiting to be restored (even if some calendars were shown again since).
+ */
+export function isAllHidden(calendars: { fileId: string; index: number }[]): boolean {
+  if (settings.shownBeforeHideAll !== null) return true;
+  return !calendars.some(({ fileId, index }) => getCalendarSettings(fileId, index).visible);
+}
+
+/**
  * "Hide all calendars" toggle (one change, saved once). Hiding remembers which calendars were
  * shown; showing brings back those, or every calendar if none were remembered (or none of them
- * exist any more).
+ * exist any more). Showing a few calendars in between does not change what is remembered.
  */
 export function toggleAllCalendars(calendars: { fileId: string; index: number }[]): void {
   const isShown = ({ fileId, index }: { fileId: string; index: number }) =>
     getCalendarSettings(fileId, index).visible;
-  const hiding = calendars.some(isShown);
+  const hiding = !isAllHidden(calendars);
   const remembered = new Set(settings.shownBeforeHideAll ?? []);
   const restore = calendars.some(({ fileId }) => remembered.has(fileId));
   const next = { ...settings.calendars };

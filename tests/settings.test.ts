@@ -10,6 +10,7 @@ import {
   normalizeSettings,
   orderCalendars,
   resetSettings,
+  isAllHidden,
   toggleAllCalendars,
   updateSettings,
 } from '../src/store/settingsStore';
@@ -149,6 +150,26 @@ describe('hide all calendars', () => {
       toggleAllCalendars(all);
       expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
       expect(getSettings().shownBeforeHideAll).toBeNull();
+    } finally {
+      resetSettings();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the remembered calendars while some are shown again', () => {
+    vi.useFakeTimers();
+    try {
+      resetSettings();
+      toggleAllCalendars(all);
+      toggleAllCalendars(all);
+      hide('b');
+      toggleAllCalendars(all); // hide all (a, c remembered)
+      updateSettings({
+        calendars: { ...getSettings().calendars, b: { ...getSettings().calendars.b!, visible: true } },
+      });
+      expect(isAllHidden(all)).toBe(true);
+      toggleAllCalendars(all); // show all: back to a and c, not b alone
+      expect(shown().map((c) => c.fileId)).toEqual(['a', 'c']);
     } finally {
       resetSettings();
       vi.useRealTimers();

@@ -9,6 +9,7 @@ import {
   effectiveTextColor,
   getCalendarSettings,
   getSettings,
+  isAllHidden,
   moveCalendar,
   onSettingsChange,
   orderCalendars,
@@ -228,7 +229,7 @@ function renderCalendars(actions: SidebarActions, state: CalendarState): HTMLEle
   // that were shown before (see toggleAllCalendars).
   if (ordered.length > 0) {
     const all = state.calendars.map((c, index) => ({ fileId: c.fileId, index }));
-    const anyShown = all.some(({ fileId, index }) => getCalendarSettings(fileId, index).visible);
+    const anyShown = !isAllHidden(all);
     const toggleAll = iconButton(
       anyShown ? 'eye' : 'eyeOff',
       anyShown ? 'Hide all calendars' : 'Show calendars again',
