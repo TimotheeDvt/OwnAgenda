@@ -19,7 +19,7 @@ import {
   onHistoryChange,
   subscriptionOf,
 } from '../store/calendarStore';
-import { isGhostEvent } from '../store/ghostEvents';
+import { isGhostEvent, setGhostEvent } from '../store/ghostEvents';
 import {
   effectiveTextColor,
   getCalendarSettings,
@@ -643,6 +643,16 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       // Right click (or the menu key / Shift+F10 on a focused event): the event's menu. Not on
       // touch screens, where a long press drags the event.
       if (agendaEvent) {
+        // Middle click: ghosts the event, or brings it back. mousedown is cancelled so Windows
+        // doesn't start its scroll-by-mouse mode.
+        info.el.addEventListener('mousedown', (e) => {
+          if (e.button === 1) e.preventDefault();
+        });
+        info.el.addEventListener('auxclick', (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          setGhostEvent(agendaEvent, !isGhostEvent(agendaEvent));
+        });
         info.el.addEventListener('contextmenu', (e) => {
           if ((e as PointerEvent).pointerType === 'touch') return;
           e.preventDefault();
