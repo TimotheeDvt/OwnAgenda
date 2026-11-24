@@ -1,9 +1,7 @@
-import type { ViewName } from '../store/settingsStore';
-
 export interface ViewMenuOptions {
   current: string;
-  views: { view: ViewName; label: string }[];
-  onPick(view: ViewName): void;
+  views: { view: string; label: string }[];
+  onPick(view: string): void;
 }
 
 let openMenu: { close(): void } | null = null;

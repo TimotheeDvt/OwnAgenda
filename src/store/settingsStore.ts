@@ -4,15 +4,46 @@ import { readableTextColor } from '../util/color';
 import { browserTimeZone, isValidTimeZone } from '../util/timeZone';
 
 export const VIEW_NAMES = [
-  'listWeek',
   'multiMonthYear',
   'dayGridMonth',
   'dayGridThreeWeek',
   'timeGridWeek',
   'timeGrid3Day',
   'timeGridDay',
+  'listYear',
+  'listMonth',
+  'listThreeWeek',
+  'listWeek',
+  'listThreeDay',
+  'listDay',
 ] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
+
+/** A time span; each is shown as a grid or as a list (see SPAN_VIEWS). */
+export type SpanName = 'year' | 'month' | '3weeks' | 'week' | '3days' | 'day';
+export const SPAN_VIEWS: Record<SpanName, { grid: ViewName; list: ViewName }> = {
+  year: { grid: 'multiMonthYear', list: 'listYear' },
+  month: { grid: 'dayGridMonth', list: 'listMonth' },
+  '3weeks': { grid: 'dayGridThreeWeek', list: 'listThreeWeek' },
+  week: { grid: 'timeGridWeek', list: 'listWeek' },
+  '3days': { grid: 'timeGrid3Day', list: 'listThreeDay' },
+  day: { grid: 'timeGridDay', list: 'listDay' },
+};
+export const SPAN_NAMES = Object.keys(SPAN_VIEWS) as SpanName[];
+
+export function isListView(view: string): boolean {
+  return view.startsWith('list');
+}
+
+/** The time span of a view, whether it is a grid or a list. */
+export function spanOf(view: string): SpanName {
+  return SPAN_NAMES.find((s) => SPAN_VIEWS[s].grid === view || SPAN_VIEWS[s].list === view) ?? 'week';
+}
+
+/** The view showing `span` as a list or as a grid. */
+export function viewFor(span: SpanName, list: boolean): ViewName {
+  return SPAN_VIEWS[span][list ? 'list' : 'grid'];
+}
 export type Theme = 'system' | 'light' | 'dark';
 
 export interface CalendarSettings {

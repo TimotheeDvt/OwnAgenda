@@ -949,7 +949,8 @@ function setupShortcuts(): void {
     today: whenReady((v) => v.today()),
     prev: whenReady((v) => v.prev()),
     next: whenReady((v) => v.next()),
-    changeView: (view) => calendarView?.changeView(view),
+    changeSpan: (span) => calendarView?.changeSpan(span),
+    toggleLayout: () => calendarView?.toggleLayout(),
     newEvent: whenReady(() => void createEventNow()),
     focusSearch: () => {
       if (!sidebar) return;

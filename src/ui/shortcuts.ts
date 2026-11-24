@@ -1,10 +1,13 @@
-import type { ViewName } from '../store/settingsStore';
+import type { SpanName } from '../store/settingsStore';
 
 export interface ShortcutActions {
   today(): void;
   prev(): void;
   next(): void;
-  changeView(view: ViewName): void;
+  /** Another time span, in the same layout (grid or list). */
+  changeSpan(span: SpanName): void;
+  /** Switches the current span between grid and list. */
+  toggleLayout(): void;
   newEvent(): void;
   focusSearch(): void;
   reloadAll(): void;
@@ -19,7 +22,7 @@ export const SHORTCUTS: [keys: string, description: string][] = [
   ['M', 'Month view'],
   ['W', 'Week view'],
   ['D', 'Day view'],
-  ['L', 'List view'],
+  ['L', 'Switch between grid and list'],
   ['Y', 'Year view'],
   ['C', 'New event'],
   ['/', 'Search events'],
@@ -101,11 +104,11 @@ export function installShortcuts(actions: ShortcutActions): () => void {
       p: actions.prev,
       ArrowRight: actions.next,
       n: actions.next,
-      m: () => actions.changeView('dayGridMonth'),
-      w: () => actions.changeView('timeGridWeek'),
-      d: () => actions.changeView('timeGridDay'),
-      l: () => actions.changeView('listWeek'),
-      y: () => actions.changeView('multiMonthYear'),
+      m: () => actions.changeSpan('month'),
+      w: () => actions.changeSpan('week'),
+      d: () => actions.changeSpan('day'),
+      y: () => actions.changeSpan('year'),
+      l: actions.toggleLayout,
       c: actions.newEvent,
       '/': actions.focusSearch,
       R: actions.reloadAll,

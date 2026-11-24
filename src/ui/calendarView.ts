@@ -24,9 +24,15 @@ import {
   effectiveTextColor,
   getCalendarSettings,
   getSettings,
+  isListView,
   onSettingsChange,
+  SPAN_NAMES,
+  SPAN_VIEWS,
+  spanOf,
   updateSettings,
   VIEW_NAMES,
+  viewFor,
+  type SpanName,
   type ViewName,
 } from '../store/settingsStore';
 import type { AgendaEvent } from '../types';
@@ -59,7 +65,10 @@ export interface CalendarView {
   today(): void;
   prev(): void;
   next(): void;
-  changeView(view: ViewName): void;
+  /** Another time span, in the current layout (grid or list). */
+  changeSpan(span: SpanName): void;
+  /** Shows the current time span as a list if it is a grid, and the other way round. */
+  toggleLayout(): void;
   /** Navigates to the date of an event (e.g. a search result). */
   showEvent(event: AgendaEvent): void;
   /** Re-measures the calendar after its container changed size (e.g. sidebar resized). */
@@ -70,40 +79,39 @@ export interface CalendarView {
 /** Below this width the toolbar is split in two rows (Phase 4 mobile layout). */
 export const NARROW_QUERY = '(max-width: 720px)';
 
-/** One button per view on computers; phones get every view (3 days too) in a menu. */
-const WIDE_VIEW_BUTTONS: ViewName[] = [
-  'listWeek',
-  'multiMonthYear',
-  'dayGridMonth',
-  'dayGridThreeWeek',
-  'timeGridWeek',
-  'timeGridDay',
-];
-
-/** Menu labels, and the short names used in the URL. */
-const VIEWS: Record<ViewName, { label: string; url: string }> = {
-  dayGridMonth: { label: 'Month', url: 'month' },
-  dayGridThreeWeek: { label: '3 weeks', url: '3weeks' },
-  timeGridWeek: { label: 'Week', url: 'week' },
-  timeGrid3Day: { label: '3 days', url: '3days' },
-  timeGridDay: { label: 'Day', url: 'day' },
-  listWeek: { label: 'List', url: 'list' },
-  multiMonthYear: { label: 'Year', url: 'year' },
+/** Time spans: one button each on computers; phones get every span (3 days too) in a menu. */
+const SPAN_LABELS: Record<SpanName, string> = {
+  year: 'Year',
+  month: 'Month',
+  '3weeks': '3 weeks',
+  week: 'Week',
+  '3days': '3 days',
+  day: 'Day',
 };
+const WIDE_SPANS: SpanName[] = ['year', 'month', '3weeks', 'week', 'day'];
+const spanButton = (span: SpanName) => `span-${span}`;
+
+/** The short names used in the URL (?view=week, ?view=list-week; "list" alone = list-week). */
+const VIEW_URLS: Record<ViewName, string> = Object.fromEntries(
+  SPAN_NAMES.flatMap((span) => [
+    [SPAN_VIEWS[span].grid, span],
+    [SPAN_VIEWS[span].list, span === 'week' ? 'list' : `list-${span}`],
+  ]),
+) as Record<ViewName, string>;
 
 const WIDE_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
-  // 'capture' (camera) sits just left of the view buttons.
+  // 'capture' (camera) sits just left of the layout and span buttons.
   header: {
     left: 'today prev,next undo,redo',
     center: 'title',
-    right: `ghosts capture ${WIDE_VIEW_BUTTONS.join(',')}`,
+    right: `ghosts capture layout-grid,layout-list ${WIDE_SPANS.map(spanButton).join(',')}`,
   },
   footer: false,
 };
 const NARROW_TOOLBAR: { header: ToolbarInput; footer: ToolbarInput | false } = {
   header: { left: 'today prev,next', center: 'title', right: '' },
-  // Undo/redo at the bottom, within reach of the thumb; the views in a menu (see openViewMenu).
-  footer: { center: 'undo,redo ghosts capture viewMenu' },
+  // Undo/redo at the bottom, within reach of the thumb; the spans in a menu (see openViewMenu).
+  footer: { center: 'undo,redo ghosts capture layout viewMenu' },
 };
 
 // 24-hour clock on the time axis; just the hour on phones, so the day columns get the width.
@@ -219,7 +227,7 @@ function readUrlPosition(): { view?: ViewName; date?: string } {
   const name = params.get('view');
   const date = params.get('date');
   return {
-    view: VIEW_NAMES.find((v) => VIEWS[v].url === name),
+    view: VIEW_NAMES.find((v) => VIEW_URLS[v] === name),
     date: date && ISO_DATE.test(date) && !Number.isNaN(Date.parse(date)) ? date : undefined,
   };
 }
@@ -227,9 +235,17 @@ function readUrlPosition(): { view?: ViewName; date?: string } {
 /** Updates the URL in place (no new history entry for every period browsed). */
 function writeUrlPosition(view: ViewName, date: string): void {
   const url = new URL(window.location.href);
-  url.searchParams.set('view', VIEWS[view].url);
+  url.searchParams.set('view', VIEW_URLS[view]);
   url.searchParams.set('date', date);
   if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+}
+
+/**
+ * How events are built for a view: the year view turns them all into dots, and the week/day grids
+ * draw ghosts in the background. Other changes of view reuse the events as they are.
+ */
+function fetchModeOf(view: string): string {
+  return view === 'multiMonthYear' ? 'year' : view.startsWith('timeGrid') ? 'timeGrid' : 'plain';
 }
 
 /** A horizontal swipe at least this long (px) and this quick (ms) changes the period. */
@@ -276,13 +292,6 @@ function listenForSwipes(
     host.removeEventListener('touchend', onEnd);
     host.removeEventListener('touchcancel', onCancel);
   };
-}
-
-const LIST_REFRESH_MS = 60_000;
-
-/** Events that haven't ended yet (ongoing or future). */
-function upcomingOnly(events: AgendaEvent[], now: Date): AgendaEvent[] {
-  return events.filter((e) => e.end.getTime() > now.getTime());
 }
 
 /**
@@ -372,6 +381,8 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   // The view type as of the last datesSet (FullCalendar loads events before `calendar` exists).
   const fromUrl = readUrlPosition();
   let currentView: string = fromUrl.view ?? initial.defaultView;
+  // What the loaded events were built for (see fetchModeOf): they are rebuilt when it changes.
+  let fetchedMode = '';
   const calendar = new Calendar(host, {
     plugins: [
       dayGridPlugin,
@@ -399,6 +410,25 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       year: 'Year',
     },
     customButtons: {
+      // Grid / list: the same time span shown the other way (see syncLayoutButtons).
+      'layout-grid': {
+        text: '',
+        hint: 'Show the period as a grid',
+        click: () => setLayout(false),
+      },
+      'layout-list': {
+        text: '',
+        hint: 'Show the period as a list',
+        click: () => setLayout(true),
+      },
+      // Phones: one button showing the current layout, switching to the other.
+      layout: { text: '', click: () => setLayout(!isListView(calendar.view.type)) },
+      ...Object.fromEntries(
+        SPAN_NAMES.map((span) => [
+          spanButton(span),
+          { text: SPAN_LABELS[span], click: () => setSpan(span) },
+        ]),
+      ),
       // Camera icon (CSS); copies the view, like a screenshot of it, to the clipboard.
       capture: {
         text: '',
@@ -420,9 +450,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         hint: 'Change view',
         click: (e) =>
           openViewMenu(e.currentTarget as HTMLElement, {
-            current: calendar.view.type,
-            views: VIEW_NAMES.map((view) => ({ view, label: VIEWS[view].label })),
-            onPick: (view) => calendar.changeView(view),
+            current: spanOf(calendar.view.type),
+            views: SPAN_NAMES.map((span) => ({ view: span, label: SPAN_LABELS[span] })),
+            onPick: (span) => setSpan(span as SpanName),
           }),
       },
     },
@@ -435,6 +465,9 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         displayEventTime: false,
       },
       timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } },
+      // The list layout of the 3-day and 3-week spans (the other spans have a built-in list).
+      listThreeDay: { type: 'list', duration: { days: 3 } },
+      listThreeWeek: { type: 'list', duration: { weeks: 3 } },
       // The whole year, twelve small months: only dots (see the events source and syncDots).
       multiMonthYear: {
         multiMonthMaxColumns: 4,
@@ -533,20 +566,25 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       const { timeZone } = getSettings();
       // Year view: every calendar is shown as dots only.
       const yearView = currentView === 'multiMonthYear';
+      fetchedMode = fetchModeOf(currentView);
       const dayOf = (instant: Date) => instantToWall(instant.getTime(), timeZone).date;
+      const { showGhosts } = getSettings();
+      const { calendars } = getCalendarState();
+      // Per calendar, not per event: a year of a recurring event is hundreds of them.
+      const styles = new Map<string, ReturnType<typeof getCalendarSettings>>();
+      const names = new Map(calendars.map((c) => [c.fileId, c.displayName]));
       for (const event of all) {
-        const style = getCalendarSettings(
-          event.calendarFileId,
-          calendarIndex(event.calendarFileId),
-        );
+        let style = styles.get(event.calendarFileId);
+        if (!style) {
+          style = getCalendarSettings(event.calendarFileId, calendarIndex(event.calendarFileId));
+          styles.set(event.calendarFileId, style);
+        }
         if (!style.dotsOnly && !yearView) {
           events.push(event);
           continue;
         }
-        if (!getSettings().showGhosts && isGhostEvent(event)) continue;
-        const name =
-          getCalendarState().calendars.find((c) => c.fileId === event.calendarFileId)
-            ?.displayName ?? '';
+        if (!showGhosts && isGhostEvent(event)) continue;
+        const name = names.get(event.calendarFileId) ?? '';
         for (const day of eventDays(event, dayOf)) {
           const dots = days.get(day) ?? new Map();
           const dot = dots.get(event.calendarFileId) ?? {
@@ -561,9 +599,6 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
         }
       }
       dotDays = days;
-      // The list is an agenda of what's ahead: hide events that are already over (ongoing ones
-      // stay, and full-day events stay until the day ends).
-      if (currentView.startsWith('list')) events = upcomingOnly(events, new Date());
       if (!getSettings().showGhosts) events = events.filter((e) => !isGhostEvent(e));
       const subscribed = new Set(
         getCalendarState()
@@ -621,14 +656,13 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
       requestAnimationFrame(syncListWeekNumbers);
       updateHistoryButtons();
       syncViewMenuButton();
+      syncSpanButtons();
       syncTitleButton();
       const view = arg.view.type as ViewName;
       // Same dates in another view reuse the loaded events; reload so the list view can leave
       // out past events (and other views show them again).
-      if (view !== currentView) {
-        currentView = view;
-        queueMicrotask(() => calendar.refetchEvents());
-      }
+      currentView = view;
+      if (fetchModeOf(view) !== fetchedMode) queueMicrotask(() => calendar.refetchEvents());
       if (VIEW_NAMES.includes(view) && view !== getSettings().defaultView) {
         updateSettings({ defaultView: view });
       }
@@ -721,13 +755,59 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     });
   }
 
-  /** The phone view menu button shows the current view's name (and ▾). */
+  /**
+   * Goes to a view. `currentView` is set first so that the events FullCalendar loads for it are
+   * the right ones at once (not built for the old view, then rebuilt: a full year is slow).
+   */
+  function showView(view: ViewName): void {
+    currentView = view;
+    calendar.changeView(view);
+  }
+
+  /** Another time span, in the current layout. */
+  function setSpan(span: SpanName): void {
+    showView(viewFor(span, isListView(calendar.view.type)));
+  }
+
+  /** The current time span as a list or as a grid. */
+  function setLayout(list: boolean): void {
+    showView(viewFor(spanOf(calendar.view.type), list));
+  }
+
+  /** The phone view menu button shows the current span's name (and ▾). */
   function syncViewMenuButton(): void {
     const btn = host.querySelector<HTMLButtonElement>('.fc-viewMenu-button');
     if (!btn) return;
-    const view = calendar.view.type as ViewName;
-    btn.textContent = `${VIEWS[view]?.label ?? 'View'} ▾`;
+    btn.textContent = `${SPAN_LABELS[spanOf(calendar.view.type)]} ▾`;
     btn.setAttribute('aria-haspopup', 'menu');
+  }
+
+  /** Highlights the current span and layout; the phone layout button names the other layout. */
+  function syncSpanButtons(): void {
+    const type = calendar.view.type;
+    const list = isListView(type);
+    const span = spanOf(type);
+    const mark = (selector: string, active: boolean) => {
+      for (const btn of host.querySelectorAll<HTMLButtonElement>(selector)) {
+        btn.classList.toggle('fc-button-active', active);
+        btn.setAttribute('aria-pressed', String(active));
+      }
+    };
+    for (const name of SPAN_NAMES) mark(`.fc-${spanButton(name)}-button`, name === span);
+    mark('.fc-layout-grid-button', !list);
+    mark('.fc-layout-list-button', list);
+    for (const btn of host.querySelectorAll<HTMLButtonElement>('.fc-layout-grid-button')) {
+      btn.setAttribute('aria-label', 'Grid');
+    }
+    for (const btn of host.querySelectorAll<HTMLButtonElement>('.fc-layout-list-button')) {
+      btn.setAttribute('aria-label', 'List');
+    }
+    for (const btn of host.querySelectorAll<HTMLButtonElement>('.fc-layout-button')) {
+      // The icon (see CSS) and the label are those of the layout the button switches to.
+      btn.dataset.target = list ? 'grid' : 'list';
+      btn.title = list ? 'Show the period as a grid' : 'Show the period as a list';
+      btn.setAttribute('aria-label', btn.title);
+    }
   }
 
   /** The ghosts button: pressed (crossed out) while ghosts are hidden. */
@@ -760,7 +840,6 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   updateHistoryButtons();
   const offHistory = onHistoryChange(updateHistoryButtons);
 
-  // In list view, drop events from the list as they end while the app stays open.
   const offSwipes = listenForSwipes(
     host,
     // Not while dragging an event, nor with the "+N more" popover open.
@@ -794,10 +873,6 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
   };
   host.addEventListener('contextmenu', onContextMenu);
 
-  const listRefresh = setInterval(() => {
-    if (calendar.view.type.startsWith('list')) calendar.refetchEvents();
-  }, LIST_REFRESH_MS);
-
   const onResize = () => {
     calendar.setOption('headerToolbar', toolbar().header);
     calendar.setOption('footerToolbar', toolbar().footer);
@@ -806,6 +881,7 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     updateHistoryButtons();
     syncGhostsButton();
     syncViewMenuButton();
+    syncSpanButtons();
     syncTitleButton();
   };
   narrow.addEventListener('change', onResize);
@@ -850,11 +926,11 @@ export function mountCalendarView(host: HTMLElement): CalendarView {
     today: () => calendar.today(),
     prev: () => calendar.prev(),
     next: () => calendar.next(),
-    changeView: (view) => calendar.changeView(view),
+    changeSpan: setSpan,
+    toggleLayout: () => setLayout(!isListView(calendar.view.type)),
     showEvent: (event) => calendar.gotoDate(event.startInput),
     updateSize: () => calendar.updateSize(),
     destroy() {
-      clearInterval(listRefresh);
       host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('click', onTitleClick);
       host.removeEventListener('keydown', onTitleKey);
